@@ -1,0 +1,25 @@
+[gd_scene load_steps=4 format=3 uid="uid://b5ball0001"]
+
+[ext_resource type="Script" path="res://scripts/ball.gd" id="1_ball"]
+[ext_resource type="Texture2D" path="res://assets/sprites/fx_ball.png" id="2_tex"]
+
+[sub_resource type="RectangleShape2D" id="BallShape"]
+size = Vector2(50, 50)
+
+[node name="Ball" type="CharacterBody2D"]
+collision_layer = 8
+collision_mask = 1
+script = ExtResource("1_ball")
+
+[node name="Sprite" type="Sprite2D" parent="."]
+texture = ExtResource("2_tex")
+
+[node name="Collision" type="CollisionShape2D" parent="."]
+shape = SubResource("BallShape")
+
+[node name="HitArea" type="Area2D" parent="."]
+collision_layer = 0
+collision_mask = 4
+
+[node name="HitShape" type="CollisionShape2D" parent="HitArea"]
+shape = SubResource("BallShape")

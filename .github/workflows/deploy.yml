@@ -1,0 +1,100 @@
+# Build the Godot 4 Web export and deploy it to GitHub Pages.
+#
+# Triggered on every push to main. The job:
+#   1. Downloads Godot 4.6.2-stable (Linux headless) + matching Web export templates
+#   2. Imports project assets (`godot --import`)
+#   3. Exports the "Web" preset (defined in export_presets.cfg) to `build/web/`
+#   4. Patches index.html if missing (defensive)
+#   5. Uploads `build/web/` as a Pages artifact and deploys
+#
+# After this workflow's first successful run, the game is live at:
+#   https://<your-username>.github.io/<repo-name>/
+
+name: Build & Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# Allow this workflow to push to gh-pages via the Pages deploy action
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Avoid concurrent deploys racing each other; latest push wins
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+env:
+  GODOT_VERSION: 4.6.2
+  GODOT_STATUS: stable
+  EXPORT_NAME: Web
+  EXPORT_DIR: build/web
+
+jobs:
+  build:
+    name: Build Web Export
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Godot ${{ env.GODOT_VERSION }}-${{ env.GODOT_STATUS }}
+        run: |
+          set -e
+          GODOT_BIN="Godot_v${GODOT_VERSION}-${GODOT_STATUS}_linux.x86_64"
+          GODOT_ZIP="${GODOT_BIN}.zip"
+          TPL_ZIP="Godot_v${GODOT_VERSION}-${GODOT_STATUS}_export_templates.tpz"
+
+          echo "Downloading Godot binary..."
+          curl -L -o "$GODOT_ZIP" "https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}-${GODOT_STATUS}/${GODOT_ZIP}"
+          unzip -q "$GODOT_ZIP"
+          sudo mv "$GODOT_BIN" /usr/local/bin/godot
+          sudo chmod +x /usr/local/bin/godot
+          godot --version
+
+          echo "Downloading Godot export templates..."
+          curl -L -o "$TPL_ZIP" "https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}-${GODOT_STATUS}/${TPL_ZIP}"
+          mkdir -p "$HOME/.local/share/godot/export_templates/${GODOT_VERSION}.${GODOT_STATUS}"
+          unzip -q "$TPL_ZIP"
+          mv templates/* "$HOME/.local/share/godot/export_templates/${GODOT_VERSION}.${GODOT_STATUS}/"
+
+      - name: Import project assets
+        # First run materializes .godot/imported/. --quit-after 2 keeps Godot from staying open after assets settle.
+        run: |
+          set -e
+          mkdir -p "${EXPORT_DIR}"
+          godot --headless --path . --import || true
+          # Re-run quiet to ensure all imports stabilize (textures, scenes, scripts)
+          godot --headless --path . --quit-after 2 || true
+
+      - name: Export Web build
+        run: |
+          set -e
+          godot --headless --path . --export-release "${EXPORT_NAME}" "${EXPORT_DIR}/index.html"
+          ls -la "${EXPORT_DIR}"
+
+      - name: Add .nojekyll
+        # Prevents GitHub Pages' Jekyll from filtering out files starting with `_`
+        # (Godot's web build doesn't ship any, but this is defensive + standard practice)
+        run: touch "${EXPORT_DIR}/.nojekyll"
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: ${{ env.EXPORT_DIR }}
+
+  deploy:
+    name: Deploy to Pages
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy
+        id: deployment
+        uses: actions/deploy-pages@v4

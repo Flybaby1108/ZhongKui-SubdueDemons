@@ -1,0 +1,18 @@
+[gd_scene load_steps=4 format=3 uid="uid://fireseed0001"]
+
+[ext_resource type="Script" path="res://scripts/fire_seed.gd" id="1_fire"]
+[ext_resource type="Texture2D" path="res://assets/sprites/Enemy/PalaceZombie/PalaceZombie_fire/PalaceZombie_fire_01.png" id="2_tex"]
+
+[sub_resource type="RectangleShape2D" id="FireShape"]
+size = Vector2(50, 50)
+
+[node name="FireSeed" type="Area2D"]
+collision_layer = 0
+collision_mask = 2
+script = ExtResource("1_fire")
+
+[node name="Sprite" type="Sprite2D" parent="."]
+texture = ExtResource("2_tex")
+
+[node name="Collision" type="CollisionShape2D" parent="."]
+shape = SubResource("FireShape")
