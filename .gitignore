@@ -36,6 +36,7 @@ tuning_test_*.png.import
 .opencode/
 .opencode-session/
 .playwright-mcp/
+.sisyphus/
 # AI assistant config — contains internal gateway URL, NOT for public repo
 opencode.json
 
