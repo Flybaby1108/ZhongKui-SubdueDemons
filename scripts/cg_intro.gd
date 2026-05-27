@@ -46,6 +46,9 @@ var _bg_anim_t:    float = 0.0
 var _skip_blink_t: float = 0.0
 
 func _ready() -> void:
+	# 立即开始后台预加载 main.tscn（CG 播放 ~11s 内足以加载完毕）
+	ResourceLoader.load_threaded_request(MAIN_MENU_PATH)
+
 	# 加载 StartBackground 帧（46 帧，全部已 import，瞬间完成）
 	_bg_frames = []
 	for i in range(1, BG_FRAME_COUNT + 1):
@@ -126,4 +129,9 @@ func _finish() -> void:
 	_cg_done = true
 	if music.playing:
 		music.stop()
-	get_tree().change_scene_to_file(MAIN_MENU_PATH)
+	# 用后台已预加载的 PackedScene 切换（无磁盘读取，零卡顿）
+	var packed: PackedScene = ResourceLoader.load_threaded_get(MAIN_MENU_PATH)
+	if packed != null:
+		get_tree().change_scene_to_packed(packed)
+	else:
+		get_tree().change_scene_to_file(MAIN_MENU_PATH)
