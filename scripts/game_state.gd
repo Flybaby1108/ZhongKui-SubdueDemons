@@ -5,7 +5,7 @@ signal lives_changed(new_lives: int)
 signal stage_changed(new_stage: int)
 
 const MAX_LIVES := 3
-const MAX_STAGE := 1
+const MAX_STAGE := 2
 
 var score: int = 0
 var lives: int = MAX_LIVES
