@@ -1,0 +1,42 @@
+[gd_scene load_steps=3 format=3 uid="uid://cg_intro_001"]
+
+[ext_resource type="Script" path="res://scripts/cg_intro.gd" id="1_cg"]
+[ext_resource type="AudioStreamMP3" path="res://assets/sprites/Start/CGv1/CGv1.mp3" id="2_music"]
+
+[node name="CgIntro" type="Node2D"]
+script = ExtResource("1_cg")
+
+[node name="BgLayer" type="TextureRect" parent="."]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+expand_mode = 1
+stretch_mode = 6
+
+[node name="CgLayer" type="TextureRect" parent="."]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+expand_mode = 1
+stretch_mode = 6
+
+[node name="Music" type="AudioStreamPlayer" parent="."]
+stream = ExtResource("2_music")
+autoplay = false
+
+[node name="SkipLabel" type="Label" parent="."]
+anchor_left = 1.0
+anchor_right = 1.0
+anchor_top = 1.0
+anchor_bottom = 1.0
+offset_left = -320.0
+offset_right = -20.0
+offset_top = -50.0
+offset_bottom = -20.0
+text = "按回车键跳过"
+horizontal_alignment = 2
+vertical_alignment = 1
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+theme_override_colors/font_outline_color = Color(0, 0, 0, 1)
+theme_override_constants/outline_size = 4
+theme_override_font_sizes/font_size = 22
