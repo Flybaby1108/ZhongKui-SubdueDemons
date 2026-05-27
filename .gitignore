@@ -49,5 +49,5 @@ rewrite_editor.py
 rewrite_editor_ui.py
 scripts/gen_levels.py
 scripts/gen_placeholders.py
-# Standalone HTML level editor (auxiliary tool, not the game itself)
-level_editor.html
+# Standalone HTML level editor — tracked in repo for collaborative editing
+# level_editor.html

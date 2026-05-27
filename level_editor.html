@@ -1,0 +1,671 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>Vacuum Cleaner Master - 关卡编辑器</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #1a1a1a;
+            color: #d4d4d4;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        h1 {
+            color: #fff;
+            margin-bottom: 10px;
+        }
+        .main-container {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            margin-top: 20px;
+            width: 100%;
+            align-items: center;
+        }
+
+        /* ── Tab Bar ── */
+        .tab-bar {
+            display: flex;
+            gap: 0;
+            width: 98vw;
+            max-width: 1920px;
+            border-bottom: 3px solid #007acc;
+        }
+        .tab-btn {
+            padding: 10px 28px;
+            background: #2d2d2d;
+            color: #aaa;
+            border: none;
+            border-radius: 6px 6px 0 0;
+            cursor: pointer;
+            font-size: 15px;
+            font-weight: bold;
+            border: 2px solid transparent;
+            border-bottom: none;
+            margin-bottom: -3px;
+            transition: background 0.15s, color 0.15s;
+        }
+        .tab-btn:hover {
+            background: #3a3a3a;
+            color: #ddd;
+        }
+        .tab-btn.active {
+            background: #1e1e1e;
+            color: #fff;
+            border-color: #007acc;
+            border-bottom-color: #1e1e1e;
+        }
+        .tab-btn .stage-badge {
+            display: inline-block;
+            background: #007acc;
+            color: #fff;
+            font-size: 11px;
+            padding: 1px 7px;
+            border-radius: 10px;
+            margin-left: 8px;
+            font-weight: normal;
+        }
+        .tab-btn.active .stage-badge {
+            background: #005fa3;
+        }
+
+        /* ── Grid ── */
+        .grid {
+            position: relative;
+            display: grid;
+            grid-template-columns: repeat(192, minmax(0, 1fr));
+            grid-template-rows: repeat(108, minmax(0, 1fr));
+            gap: 0;
+            background-color: #808080;
+            background-size: 100% 100%;
+            border: none;
+            user-select: none;
+            box-sizing: border-box;
+            width: 98vw;
+            height: 55.125vw;
+            max-width: 1920px;
+            max-height: 1080px;
+        }
+        .cell {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0);
+            font-size: 0px;
+            transition: opacity 0.2s;
+        }
+        .cell.has-label::after {
+            content: attr(data-label);
+            position: absolute;
+            left: 50%;
+            top: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 14px;
+            font-weight: bold;
+            color: white;
+            text-shadow: 1px 1px 2px black, -1px -1px 2px black, 1px -1px 2px black, -1px 1px 2px black;
+            white-space: nowrap;
+            pointer-events: none;
+            z-index: 10;
+        }
+        .grid.transparent-cells .cell {
+            opacity: 0.2;
+        }
+        .cell:hover {
+            opacity: 0.8;
+        }
+
+        /* ── Sidebar / Tools ── */
+        .sidebar {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            background: #252526;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+            width: 100%;
+        }
+        .tool-group {
+            display: flex;
+            flex-direction: row;
+            gap: 15px;
+            align-items: center;
+        }
+        .tool {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 8px 12px;
+            background: #333;
+            border-radius: 4px;
+            cursor: pointer;
+            border: 2px solid transparent;
+            transition: transform 0.1s, border-color 0.1s;
+        }
+        .tool:hover {
+            filter: brightness(1.15);
+            transform: translateY(-1px);
+        }
+        .tool.selected {
+            border-color: #ffffff;
+            box-shadow: 0 0 0 2px #007acc, 0 0 12px rgba(0, 122, 204, 0.6);
+        }
+        .tool span {
+            text-shadow: 1px 1px 2px rgba(0,0,0,0.6);
+            font-weight: bold;
+        }
+        .tool-color {
+            width: 100%;
+            height: 100%;
+            border-radius: 4px;
+            border: 1px solid #000;
+        }
+
+        /* ── IO Section ── */
+        .io-section {
+            margin-top: 20px;
+            width: 100%;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+        textarea {
+            width: 100%;
+            height: 200px;
+            background: #1e1e1e;
+            color: #d4d4d4;
+            border: 1px solid #555;
+            padding: 10px;
+            font-family: monospace;
+            resize: vertical;
+            box-sizing: border-box;
+        }
+        button {
+            background: #007acc;
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            cursor: pointer;
+            border-radius: 4px;
+            font-weight: bold;
+        }
+        button:hover {
+            background: #005f9e;
+        }
+        .button-group {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+        .level-hint {
+            font-size: 13px;
+            color: #888;
+            padding: 6px 12px;
+            background: #2a2a2a;
+            border-left: 3px solid #007acc;
+            border-radius: 3px;
+        }
+        .level-hint b { color: #7ec8e3; }
+    </style>
+</head>
+
+<body>
+<div class="main-container">
+
+    <!-- Tab Bar -->
+    <div class="tab-bar" id="tab-bar">
+        <button class="tab-btn active" data-stage="1">
+            Chapter1 <span class="stage-badge">Stage 1</span>
+        </button>
+        <button class="tab-btn" data-stage="2">
+            ChapterBoss <span class="stage-badge">Stage 2</span>
+        </button>
+    </div>
+
+    <!-- Grid -->
+    <div class="grid" id="grid"></div>
+
+    <!-- Level hint -->
+    <div class="level-hint" id="level-hint">
+        当前编辑：<b id="level-hint-name">Chapter1</b>（Stage <b id="level-hint-stage">1</b>）
+        &nbsp;·&nbsp; 背景图：<b id="level-hint-bg">Chapter1_BG_a.png</b>
+        &nbsp;·&nbsp; <kbd>V</kbd> 切换透明度
+    </div>
+
+    <!-- Tools -->
+    <div class="sidebar">
+        <div class="tool-group" id="tools">
+            <div class="tool selected" data-char=" ">
+                <div class="tool-color" style="background: rgba(0,0,0,0); border: 1px dashed #555;"></div>
+                <span>橡皮擦 (空格)</span>
+            </div>
+            <div class="tool" data-char="#">
+                <div class="tool-color" style="background: rgba(255, 255, 0, 1);"></div>
+                <span>地面 (#)</span>
+            </div>
+            <div class="tool" data-char="=">
+                <div class="tool-color" style="background: rgba(0, 255, 0, 1);"></div>
+                <span>平台 (=)</span>
+            </div>
+            <div class="tool" data-char="X">
+                <div class="tool-color" style="background: rgba(128, 0, 128, 1);"></div>
+                <span>禁区 (X)</span>
+            </div>
+            <div class="tool" data-char="P">
+                <div class="tool-color" style="background: rgba(30, 144, 255, 1);"></div>
+                <span>主角 (P)</span>
+            </div>
+            <div class="tool" data-char="M">
+                <div class="tool-color" style="background: rgba(255, 69, 0, 1);"></div>
+                <span>流星锤 (M)</span>
+            </div>
+            <div class="tool" data-char="R">
+                <div class="tool-color" style="background: rgba(255, 0, 128, 1);"></div>
+                <span>红衣女鬼 (R)</span>
+            </div>
+            <div class="tool" data-char="D">
+                <div class="tool-color" style="background: rgba(180, 0, 0, 1);"></div>
+                <span>红魔王 (D)</span>
+            </div>
+            <div class="tool" data-char="Z">
+                <div class="tool-color" style="background: rgba(120, 170, 80, 1);"></div>
+                <span>宫廷僵尸 (Z)</span>
+            </div>
+            <div class="tool" data-char="a">
+                <div class="tool-color" style="background: rgba(255, 0, 0, 1);"></div>
+                <span>苹果 (a)</span>
+            </div>
+            <div class="tool" data-char="r">
+                <div class="tool-color" style="background: rgba(255, 215, 0, 1);"></div>
+                <span>元宝 (r)</span>
+            </div>
+            <div class="tool" data-char="h">
+                <div class="tool-color" style="background: rgba(255, 105, 180, 1);"></div>
+                <span>爱心 (h)</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- IO Section -->
+    <div class="io-section" style="width: 95vw; max-width: 1920px; background: #252526; padding: 20px; border-radius: 8px; box-sizing: border-box;">
+        <div>
+            <h1 style="margin-top:0;">Vacuum Cleaner Master - 关卡编辑器</h1>
+            <p style="color:#aaa; margin:0 0 12px;">
+                1. 切换上方 Tab 选择关卡。&nbsp;
+                2. 拖拽绘制地形/实体。&nbsp;
+                3. <b>导出</b> 将生成同时包含 <code>Chapter1</code> 和 <code>ChapterBoss</code> 的完整 <code>level_data.gd</code>，两个关卡数据互不影响。
+            </p>
+        </div>
+        <div class="button-group">
+            <button id="btn-export">⬇️ 导出完整 level_data.gd（含所有关卡）</button>
+            <button id="btn-import">⬆️ 导入（当前 Tab 或完整文件均可）</button>
+            <button id="btn-import-all" style="background:#2d7a2d;">⬆️ 从完整文件一键导入所有关卡</button>
+            <button id="btn-clear" style="background: #a93226;">🗑 清空当前关卡</button>
+        </div>
+        <textarea id="io-text" placeholder='支持两种导入方式：
+1. 粘贴完整 level_data.gd 后点击「一键导入所有关卡」，自动分发到对应 Tab。
+2. 只粘贴当前关卡的行（带双引号），点击「导入」只更新当前 Tab。
+
+导出后直接替换整个 level_data.gd 文件内容即可。'></textarea>
+    </div>
+
+</div>
+<script>
+    const COLS = 192;
+    const ROWS = 108;
+
+    // ── Level Definitions ──────────────────────────────────────────────────────
+    // Each entry: name, stageKey (int used in GDScript LEVELS dict), bgImage
+    // mapData is allocated separately to avoid sharing references between levels.
+    const LEVEL_DEFS = {
+        1: {
+            name:    'Chapter1',
+            bgImage: 'assets/sprites/Chapter1/Chapter1_BG_a.png',
+        },
+        2: {
+            name:    'ChapterBoss',
+            bgImage: 'assets/sprites/ChapterBoss/ChapterBoss_BG_a.png',
+        },
+    };
+
+    // Storage: one isolated 2-D array per stage. Never share references.
+    const allMapData = {};
+    for (const stageKey of Object.keys(LEVEL_DEFS)) {
+        allMapData[stageKey] = Array.from({ length: ROWS }, () => Array(COLS).fill(' '));
+    }
+
+    // ── Shared Tool / Color State ──────────────────────────────────────────────
+    const colorMap = {
+        ' ': 'rgba(0,0,0,0)',
+        '#': 'rgba(255, 255, 0, 1)',
+        '=': 'rgba(0, 255, 0, 1)',
+        'X': 'rgba(128, 0, 128, 1)',
+        'P': 'rgba(30, 144, 255, 1)',
+        'M': 'rgba(255, 69, 0, 1)',
+        'R': 'rgba(255, 0, 128, 1)',
+        'D': 'rgba(180, 0, 0, 1)',
+        'Z': 'rgba(120, 170, 80, 1)',
+        'a': 'rgba(255, 0, 0, 1)',
+        'r': 'rgba(255, 215, 0, 1)',
+        'h': 'rgba(255, 105, 180, 1)',
+    };
+    const nameMap = {
+        'P': '主角',
+        'M': '流星锤',
+        'R': '红衣女鬼',
+        'D': '红魔王',
+        'Z': '宫廷僵尸',
+        'a': '苹果',
+        'r': '元宝',
+        'h': '爱心',
+    };
+    const ENTITY_CHARS = new Set(Object.keys(nameMap));
+
+    let currentChar  = ' ';
+    let currentColor = colorMap[' '];
+    let isMouseDown  = false;
+
+    // ── Active Tab State ───────────────────────────────────────────────────────
+    let activeStage = 1;   // integer key into LEVEL_DEFS / allMapData
+
+    function getMapData() { return allMapData[activeStage]; }
+
+    // ── DOM Refs ───────────────────────────────────────────────────────────────
+    const gridEl       = document.getElementById('grid');
+    const tools        = document.querySelectorAll('.tool');
+    const ioText       = document.getElementById('io-text');
+    const tabBtns      = document.querySelectorAll('.tab-btn');
+    const hintName     = document.getElementById('level-hint-name');
+    const hintStage    = document.getElementById('level-hint-stage');
+    const hintBg       = document.getElementById('level-hint-bg');
+
+    // ── Build Grid DOM (once) ──────────────────────────────────────────────────
+    // We reuse the same DOM cells for all levels; only mapData + bg image swap.
+    const cellEls = [];   // flat array indexed [y * COLS + x]
+
+    for (let y = 0; y < ROWS; y++) {
+        for (let x = 0; x < COLS; x++) {
+            const cell = document.createElement('div');
+            cell.className = 'cell';
+            cell.dataset.x = x;
+            cell.dataset.y = y;
+            cell.addEventListener('mousedown', () => { isMouseDown = true;  paint(x, y, cell); });
+            cell.addEventListener('mouseover', () => { if (isMouseDown) paint(x, y, cell); });
+            gridEl.appendChild(cell);
+            cellEls.push(cell);
+        }
+    }
+    window.addEventListener('mouseup', () => { isMouseDown = false; });
+
+    // ── Brush Cursor ───────────────────────────────────────────────────────────
+    const brushCursor = document.createElement('div');
+    brushCursor.style.cssText = 'position:absolute;border:2px solid white;pointer-events:none;display:none;box-sizing:border-box;z-index:100;';
+    gridEl.appendChild(brushCursor);
+
+    gridEl.addEventListener('mousemove', (e) => {
+        const cell = e.target.closest('.cell');
+        if (!cell) return;
+        const rect     = cell.getBoundingClientRect();
+        const gridRect = gridEl.getBoundingClientRect();
+        const isEntity = ![ ' ', '#', '=', 'X' ].includes(currentChar);
+        brushCursor.style.display = 'block';
+        if (isEntity) {
+            brushCursor.style.left   = (rect.left - gridRect.left - rect.width  * 2) + 'px';
+            brushCursor.style.top    = (rect.top  - gridRect.top  - rect.height * 2) + 'px';
+            brushCursor.style.width  = (rect.width  * 6) + 'px';
+            brushCursor.style.height = (rect.height * 6) + 'px';
+        } else {
+            brushCursor.style.left   = (rect.left - gridRect.left) + 'px';
+            brushCursor.style.top    = (rect.top  - gridRect.top)  + 'px';
+            brushCursor.style.width  = rect.width  + 'px';
+            brushCursor.style.height = rect.height + 'px';
+        }
+    });
+    gridEl.addEventListener('mouseleave', () => { brushCursor.style.display = 'none'; });
+
+    // ── Tool Button Styles ─────────────────────────────────────────────────────
+    function pickTextColor(rgbaStr) {
+        const m = rgbaStr.match(/rgba?\(([^)]+)\)/);
+        if (!m) return '#fff';
+        const parts = m[1].split(',').map(s => parseFloat(s.trim()));
+        const [r, g, b, a = 1] = parts;
+        if (a < 0.1) return '#ccc';
+        const luma = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+        return luma > 0.6 ? '#000' : '#fff';
+    }
+    tools.forEach(tool => {
+        const ch    = tool.dataset.char;
+        const color = colorMap[ch];
+        if (ch === ' ') {
+            tool.style.cssText += 'background:#2a2a2a;color:#ccc;border-style:dashed;border-color:#666;';
+        } else if (color) {
+            tool.style.background = color;
+            tool.style.color      = pickTextColor(color);
+        }
+    });
+
+    // ── Tool Selection ─────────────────────────────────────────────────────────
+    tools.forEach(tool => {
+        tool.addEventListener('click', () => {
+            tools.forEach(t => t.classList.remove('selected'));
+            tool.classList.add('selected');
+            currentChar  = tool.dataset.char;
+            currentColor = colorMap[currentChar];
+            gridEl.style.cursor = ['#', '=', 'X'].includes(currentChar) ? 'none' : 'crosshair';
+        });
+    });
+    gridEl.style.cursor = 'crosshair';
+
+    // ── Keyboard Shortcuts ─────────────────────────────────────────────────────
+    window.addEventListener('keydown', (e) => {
+        if (e.key.toLowerCase() === 'v') gridEl.classList.toggle('transparent-cells');
+        // Number keys 1,2 switch tabs quickly
+        const n = parseInt(e.key);
+        if (n >= 1 && n <= Object.keys(LEVEL_DEFS).length && !e.ctrlKey && !e.metaKey) {
+            switchTab(n);
+        }
+    });
+
+    // ── Tab Switching ──────────────────────────────────────────────────────────
+    function switchTab(stageKey) {
+        stageKey = parseInt(stageKey);
+        if (!(stageKey in LEVEL_DEFS)) return;
+        activeStage = stageKey;
+
+        // Update tab button states
+        tabBtns.forEach(btn => {
+            btn.classList.toggle('active', parseInt(btn.dataset.stage) === stageKey);
+        });
+
+        // Swap background image to match this level's foreground art
+        const def = LEVEL_DEFS[stageKey];
+        gridEl.style.backgroundImage = `url('${def.bgImage}')`;
+
+        // Update hint bar
+        hintName.textContent  = def.name;
+        hintStage.textContent = stageKey;
+        hintBg.textContent    = def.bgImage.split('/').pop();
+
+        // Re-render grid with this level's data
+        renderAll();
+    }
+
+    // Wire tab buttons
+    tabBtns.forEach(btn => {
+        btn.addEventListener('click', () => switchTab(parseInt(btn.dataset.stage)));
+    });
+
+    // ── Paint ──────────────────────────────────────────────────────────────────
+    let labelRefreshScheduled = false;
+    function scheduleLabelRefresh() {
+        if (labelRefreshScheduled) return;
+        labelRefreshScheduled = true;
+        requestAnimationFrame(() => { labelRefreshScheduled = false; refreshLabels(); });
+    }
+
+    function paint(x, y, cellEl) {
+        const mapData = getMapData();
+        const isEntity = ![ ' ', '#', '=', 'X' ].includes(currentChar);
+        if (isEntity) {
+            for (let dy = -2; dy <= 3; dy++) {
+                for (let dx = -2; dx <= 3; dx++) {
+                    const nx = x + dx, ny = y + dy;
+                    if (nx >= 0 && nx < COLS && ny >= 0 && ny < ROWS) {
+                        mapData[ny][nx] = currentChar;
+                        renderCell(cellEls[ny * COLS + nx], currentChar);
+                    }
+                }
+            }
+        } else {
+            mapData[y][x] = currentChar;
+            renderCell(cellEl, currentChar);
+        }
+        scheduleLabelRefresh();
+    }
+
+    // ── Render ─────────────────────────────────────────────────────────────────
+    function renderCell(cellEl, char) {
+        cellEl.style.backgroundColor = colorMap[char] || colorMap[' '];
+        cellEl.removeAttribute('data-label');
+        cellEl.classList.remove('has-label');
+    }
+
+    function renderAll() {
+        const mapData = getMapData();
+        for (let y = 0; y < ROWS; y++) {
+            for (let x = 0; x < COLS; x++) {
+                renderCell(cellEls[y * COLS + x], mapData[y][x]);
+            }
+        }
+        refreshLabels();
+    }
+
+    function refreshLabels() {
+        const mapData = getMapData();
+        const visited = Array.from({ length: ROWS }, () => Array(COLS).fill(false));
+        for (let y = 0; y < ROWS; y++) {
+            for (let x = 0; x < COLS; x++) {
+                if (visited[y][x]) continue;
+                const ch = mapData[y][x];
+                if (!ENTITY_CHARS.has(ch)) { visited[y][x] = true; continue; }
+                const stack = [[x, y]];
+                let minX = x, maxX = x, minY = y, maxY = y;
+                while (stack.length > 0) {
+                    const [cx, cy] = stack.pop();
+                    if (cx < 0 || cx >= COLS || cy < 0 || cy >= ROWS) continue;
+                    if (visited[cy][cx]) continue;
+                    if (mapData[cy][cx] !== ch) continue;
+                    visited[cy][cx] = true;
+                    if (cx < minX) minX = cx; if (cx > maxX) maxX = cx;
+                    if (cy < minY) minY = cy; if (cy > maxY) maxY = cy;
+                    stack.push([cx+1,cy],[cx-1,cy],[cx,cy+1],[cx,cy-1]);
+                }
+                const cx = Math.floor((minX + maxX) / 2);
+                const cy = Math.floor((minY + maxY) / 2);
+                const c = cellEls[cy * COLS + cx];
+                if (c) { c.setAttribute('data-label', nameMap[ch]); c.classList.add('has-label'); }
+            }
+        }
+    }
+
+    // ── Export (ALL levels → complete level_data.gd) ───────────────────────────
+    document.getElementById('btn-export').addEventListener('click', () => {
+        const stageKeys = Object.keys(LEVEL_DEFS).map(Number).sort((a, b) => a - b);
+        let out = [];
+        out.push('extends Node');
+        out.push('');
+        out.push('const LEVELS := {');
+        for (const stageKey of stageKeys) {
+            const mapData = allMapData[stageKey];
+            out.push('\t' + stageKey + ': [');
+            for (let y = 0; y < ROWS; y++) {
+                out.push('\t\t"' + mapData[y].join('') + '",');
+            }
+            out.push('\t],');
+        }
+        out.push('}');
+        out.push('');
+        out.push('const TILE_SOURCES := {"#": 0, ".": 1, "=": 2}');
+        out.push('const PICKUP_TYPES := {"a": 0, "c": 1, "r": 2, "h": 3}');
+        out.push('');
+        ioText.value = out.join('\n');
+        ioText.select();
+        try { document.execCommand('copy'); } catch(e) {}
+        alert('完整的 level_data.gd（含全部 ' + stageKeys.length + ' 个关卡）已导出并复制到剪贴板！\n请用它直接替换整个 level_data.gd 文件的内容。');
+    });
+
+    // ── Import Single Tab (lines with double-quotes → current tab only) ────────
+    document.getElementById('btn-import').addEventListener('click', () => {
+        const mapData = getMapData();
+        const lines = ioText.value.split('\n');
+        const parsed = [];
+        for (const line of lines) {
+            const m = line.match(/"([^"]*)"/);
+            if (m) parsed.push(m[1]);
+        }
+        if (parsed.length === 0) {
+            alert('未找到有效的地图字符串！请确保粘贴的是带双引号的行。');
+            return;
+        }
+        for (let y = 0; y < ROWS; y++) {
+            for (let x = 0; x < COLS; x++) {
+                mapData[y][x] = (y < parsed.length && x < parsed[y].length) ? parsed[y][x] : ' ';
+            }
+        }
+        renderAll();
+        alert('已导入到「' + LEVEL_DEFS[activeStage].name + '」（Stage ' + activeStage + '）。其他关卡数据不受影响。');
+    });
+
+    // ── Import All (full level_data.gd → each stage block → correct tab) ──────
+    document.getElementById('btn-import-all').addEventListener('click', () => {
+        const text = ioText.value;
+        // Match each stage block:  <stageKey>: [\n ... \n\t],
+        const blockRe = /^\s*(\d+)\s*:\s*\[([^\]]*)\]/gms;
+        let matched = 0;
+        let match;
+        while ((match = blockRe.exec(text)) !== null) {
+            const stageKey = parseInt(match[1]);
+            if (!(stageKey in allMapData)) continue;
+            const blockText = match[2];
+            const parsed = [];
+            const lineRe = /"([^"]*)"/g;
+            let lm;
+            while ((lm = lineRe.exec(blockText)) !== null) parsed.push(lm[1]);
+            if (parsed.length === 0) continue;
+            const mapData = allMapData[stageKey];
+            for (let y = 0; y < ROWS; y++) {
+                for (let x = 0; x < COLS; x++) {
+                    mapData[y][x] = (y < parsed.length && x < parsed[y].length) ? parsed[y][x] : ' ';
+                }
+            }
+            matched++;
+        }
+        if (matched === 0) {
+            alert('未找到任何关卡数据块。请粘贴完整的 level_data.gd 文件内容。');
+            return;
+        }
+        renderAll();
+        const names = Object.keys(LEVEL_DEFS).filter(k => parseInt(k) in allMapData).map(k => LEVEL_DEFS[k].name).join('、');
+        alert('已从完整文件导入 ' + matched + ' 个关卡（' + names + '）。\n当前显示「' + LEVEL_DEFS[activeStage].name + '」。');
+    });
+
+    // ── Clear Current Tab ──────────────────────────────────────────────────────
+    document.getElementById('btn-clear').addEventListener('click', () => {
+        const name = LEVEL_DEFS[activeStage].name;
+        if (!confirm('确定要清空「' + name + '」（Stage ' + activeStage + '）的地图吗？其他关卡数据不受影响。')) return;
+        allMapData[activeStage] = Array.from({ length: ROWS }, () => Array(COLS).fill(' '));
+        renderAll();
+    });
+
+    // ── Init ───────────────────────────────────────────────────────────────────
+    // Set initial background and render
+    switchTab(1);
+
+</script>
+</body>
+</html>
