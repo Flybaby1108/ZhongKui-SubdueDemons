@@ -3,7 +3,10 @@
 [ext_resource type="Script" path="res://scripts/cg_intro.gd" id="1_cg"]
 [ext_resource type="AudioStreamMP3" path="res://assets/sprites/Start/CGv1/CGv1.mp3" id="2_music"]
 
-[node name="CgIntro" type="Node2D"]
+[node name="CgIntro" type="Control"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
 script = ExtResource("1_cg")
 
 [node name="BgLayer" type="TextureRect" parent="."]
