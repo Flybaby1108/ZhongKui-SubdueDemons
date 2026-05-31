@@ -104,6 +104,10 @@ func _tick_slide(delta: float) -> void:
 func _on_body_entered(body: Node) -> void:
 	# 碰到钟馗：扣血并消失（玩家在 take_damage 时已处理无敌帧，
 	# 这里只在玩家可受伤时扣血，不重复处理无敌逻辑）
+	if body is Boss and not body.dying:
+		body.take_damage(1)
+		queue_free()
+		return
 	if body is Player and not body.invincible:
 		body.invincible = true
 		body.invincible_timer = body.HURT_INVINCIBLE_TIME

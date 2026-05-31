@@ -31,11 +31,16 @@ func _ready() -> void:
 	GameState.reset_game()
 	# 启动后台线程加载第一关
 	ResourceLoader.load_threaded_request(STAGE_1_PATH)
-	# 加载背景序列帧（StartBackground_01.jpg ~ StartBackground_46.jpg）
-	_bg_frames = []
-	for i in range(1, BG_FRAME_COUNT + 1):
-		var path: String = "res://assets/sprites/Start/StartBackground/StartBackground_%02d.jpg" % i
-		_bg_frames.append(load(path))
+	# 优先复用 cg_intro 阶段已加载并 GPU 预热好的 BG 帧（autoload 共享缓存），
+	# 避免切场景瞬间再次同步 load 46 张 1920×1080 JPG 导致的 ~1 秒卡顿。
+	if not GameState.shared_start_bg_frames.is_empty():
+		_bg_frames = GameState.shared_start_bg_frames
+	else:
+		# Fallback：直接进入主菜单（开发期跳过 CG）时仍需自己加载
+		_bg_frames = []
+		for i in range(1, BG_FRAME_COUNT + 1):
+			var path: String = "res://assets/sprites/Start/StartBackground/StartBackground_%02d.jpg" % i
+			_bg_frames.append(load(path))
 	if not _bg_frames.is_empty():
 		background.texture = _bg_frames[0]
 	# 标题位置/大小跟随 CharTuning（F1 调参面板可实时调节）

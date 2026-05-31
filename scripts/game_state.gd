@@ -11,6 +11,10 @@ var score: int = 0
 var lives: int = MAX_LIVES
 var current_stage: int = 1
 
+# StartBackground 序列帧的共享缓存：cg_intro 加载完后存到这里，main_menu
+# 直接复用，避免切场景时再次同步 load 造成的 1 秒卡顿。
+var shared_start_bg_frames: Array = []
+
 func reset_game() -> void:
 	score = 0
 	lives = MAX_LIVES

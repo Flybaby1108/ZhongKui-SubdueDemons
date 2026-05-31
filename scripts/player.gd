@@ -242,11 +242,20 @@ func _apply_tuning() -> void:
 	queue_redraw()
 
 func _draw() -> void:
-	# Show suction area debug rect when tuning panel is open
+	# Show suction area + body collision debug rects when tuning panel is open
 	var tuning_panel = get_tree().get_first_node_in_group("tuning_panel")
 	var panel_visible = tuning_panel != null and tuning_panel.visible
 	if not panel_visible:
 		return
+	# Body 物理碰撞框（蓝色矩形）：实时显示 Body Width / Height / Offset Y 调参效果
+	# 中心 = (0, body_offset_y)，尺寸 = body_width × body_height（局部坐标，不随朝向镜像）
+	var body_w: float = CharTuning.body_width
+	var body_h: float = CharTuning.body_height
+	var body_y: float = CharTuning.body_offset_y
+	var body_rect := Rect2(-body_w / 2.0, body_y - body_h / 2.0, body_w, body_h)
+	draw_rect(body_rect, Color(0.2, 0.5, 1.0, 0.25), true)
+	draw_rect(body_rect, Color(0.3, 0.6, 1.0, 0.95), false, 2.0)
+	# Suction 吸气区域（青色矩形）
 	var dir_x: float = 1.0 if facing_right else -1.0
 	var cx: float = CharTuning.suction_offset_x * dir_x
 	var cy: float = CharTuning.suction_offset_y
@@ -358,13 +367,18 @@ func _apply_suction(delta: float) -> void:
 	)
 	for body in suction_area.get_overlapping_bodies():
 		# 跳过已捕获 / 正在飞行的敌人（in-flight 自我推进，与吸气状态解耦）
-		if not (body is Enemy) or body.is_captured or body.is_in_flight:
+		# Boss 投射物 FireSkull 也参与吸入流程：实现了与 Enemy 同名的鸭子接口
+		# （freeze_for_suction / begin_capture_flight / get_suction_capture_time / 
+		#  is_captured / is_in_flight / suction_hold_timer / enemy_type），
+		# 这里只需把判定从 `is Enemy` 扩展为 `is Enemy or is FireSkull` 即可。
+		if not (body is Enemy or body is FireSkull) or body.is_captured or body.is_in_flight:
 			continue
 		# 冻结敌人在原地（蓄力 + 完成期都用同一套冻结逻辑）
 		body.freeze_for_suction()
-		# 1 秒计满 → 立刻起飞向葫芦（独立于玩家吸键状态）
+		# 计满 → 立刻起飞向葫芦（独立于玩家吸键状态）
+		# 阈值按敌人类型区分：MeteorHammer=2s, RedDevil=3s, RedGhost/PalaceZombie=1s
 		# 注意：begin_capture_flight 会重置 is_frozen / is_being_sucked，并接管 sprite 缩放公式
-		if body.suction_hold_timer >= Enemy.SUCTION_CAPTURE_TIME:
+		if body.suction_hold_timer >= body.get_suction_capture_time():
 			body.begin_capture_flight(vanish_point)
 			_in_flight_enemies.append(body)
 			break
@@ -524,6 +538,15 @@ func _on_hurt_box_body_entered(body: Node) -> void:
 		invincible = true
 		invincible_timer = HURT_INVINCIBLE_TIME
 		take_damage()
+	# Boss 的 FireSkull 投射物撞到钟馗：扣一颗心 + FireSkull 自销毁
+	# （吸气期间不应被打到——is_vacuuming 已在函数顶部 early-return；
+	#  且被吸到后 is_captured/is_in_flight 期间 FireSkull 是 hide() 状态不会再触发。）
+	elif body is FireSkull and not body.is_captured and not body.is_in_flight:
+		last_damage_frame = current_frame
+		invincible = true
+		invincible_timer = HURT_INVINCIBLE_TIME
+		take_damage()
+		body.queue_free()
 
 func _on_hurt_box_area_entered(_area: Area2D) -> void:
 	pass

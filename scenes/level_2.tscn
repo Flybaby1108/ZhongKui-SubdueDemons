@@ -126,7 +126,7 @@ animations = [{
 [node name="Level" type="Node2D"]
 script = ExtResource("1_level")
 stage_number = 2
-time_limit = 90.0
+time_limit = 180.0
 
 [node name="Background_b" type="AnimatedSprite2D" parent="."]
 sprite_frames = SubResource("SpriteFrames_bg_b")

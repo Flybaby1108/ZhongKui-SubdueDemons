@@ -276,17 +276,13 @@
                 <div class="tool-color" style="background: rgba(120, 170, 80, 1);"></div>
                 <span>宫廷僵尸 (Z)</span>
             </div>
-            <div class="tool" data-char="a">
-                <div class="tool-color" style="background: rgba(255, 0, 0, 1);"></div>
-                <span>苹果 (a)</span>
+            <div class="tool" data-char="B">
+                <div class="tool-color" style="background: rgba(80, 0, 0, 1);"></div>
+                <span>Boss (B)</span>
             </div>
             <div class="tool" data-char="r">
                 <div class="tool-color" style="background: rgba(255, 215, 0, 1);"></div>
                 <span>元宝 (r)</span>
-            </div>
-            <div class="tool" data-char="h">
-                <div class="tool-color" style="background: rgba(255, 105, 180, 1);"></div>
-                <span>爱心 (h)</span>
             </div>
         </div>
     </div>
@@ -306,7 +302,9 @@
             <button id="btn-import">⬆️ 导入（当前 Tab 或完整文件均可）</button>
             <button id="btn-import-all" style="background:#2d7a2d;">⬆️ 从完整文件一键导入所有关卡</button>
             <button id="btn-clear" style="background: #a93226;">🗑 清空当前关卡</button>
+            <button id="btn-clear-all" style="background: #7b241c;">🗑 一键清空所有关卡</button>
         </div>
+        <input type="file" id="file-picker" accept=".gd,.txt,text/plain" style="display:none;">
         <textarea id="io-text" placeholder='支持两种导入方式：
 1. 粘贴完整 level_data.gd 后点击「一键导入所有关卡」，自动分发到对应 Tab。
 2. 只粘贴当前关卡的行（带双引号），点击「导入」只更新当前 Tab。
@@ -350,9 +348,8 @@
         'R': 'rgba(255, 0, 128, 1)',
         'D': 'rgba(180, 0, 0, 1)',
         'Z': 'rgba(120, 170, 80, 1)',
-        'a': 'rgba(255, 0, 0, 1)',
+        'B': 'rgba(80, 0, 0, 1)',
         'r': 'rgba(255, 215, 0, 1)',
-        'h': 'rgba(255, 105, 180, 1)',
     };
     const nameMap = {
         'P': '主角',
@@ -360,9 +357,8 @@
         'R': '红衣女鬼',
         'D': '红魔王',
         'Z': '宫廷僵尸',
-        'a': '苹果',
+        'B': 'Boss',
         'r': '元宝',
-        'h': '爱心',
     };
     const ENTITY_CHARS = new Set(Object.keys(nameMap));
 
@@ -574,9 +570,15 @@
     }
 
     // ── Export (ALL levels → complete level_data.gd) ───────────────────────────
-    document.getElementById('btn-export').addEventListener('click', () => {
+    // Persistent handle to scripts/level_data.gd, granted once per tab via the
+    // File System Access API. Subsequent saves write straight through without
+    // any extra prompts.
+    let levelDataFileHandle = null;
+    const supportsFsAccess = typeof window.showSaveFilePicker === 'function';
+
+    function buildLevelDataText() {
         const stageKeys = Object.keys(LEVEL_DEFS).map(Number).sort((a, b) => a - b);
-        let out = [];
+        const out = [];
         out.push('extends Node');
         out.push('');
         out.push('const LEVELS := {');
@@ -591,12 +593,70 @@
         out.push('}');
         out.push('');
         out.push('const TILE_SOURCES := {"#": 0, ".": 1, "=": 2}');
-        out.push('const PICKUP_TYPES := {"a": 0, "c": 1, "r": 2, "h": 3}');
+        out.push('const PICKUP_TYPES := {"r": 2}');
         out.push('');
-        ioText.value = out.join('\n');
+        return out.join('\n');
+    }
+
+    async function writeViaFsAccess(text) {
+        // First click in this tab: ask user to point us at level_data.gd.
+        // Browser remembers the permission for the remainder of the session.
+        if (!levelDataFileHandle) {
+            levelDataFileHandle = await window.showSaveFilePicker({
+                suggestedName: 'level_data.gd',
+                types: [{
+                    description: 'Godot script',
+                    accept: { 'text/plain': ['.gd'] },
+                }],
+            });
+        }
+        // Verify we still have write permission (some browsers re-prompt).
+        if (typeof levelDataFileHandle.queryPermission === 'function') {
+            const opts = { mode: 'readwrite' };
+            let perm = await levelDataFileHandle.queryPermission(opts);
+            if (perm !== 'granted') perm = await levelDataFileHandle.requestPermission(opts);
+            if (perm !== 'granted') throw new Error('write permission denied');
+        }
+        const writable = await levelDataFileHandle.createWritable();
+        await writable.write(text);
+        await writable.close();
+        return levelDataFileHandle.name || 'level_data.gd';
+    }
+
+    function downloadAsFallback(text) {
+        const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+        const url  = URL.createObjectURL(blob);
+        const a    = document.createElement('a');
+        a.href     = url;
+        a.download = 'level_data.gd';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+    }
+
+    document.getElementById('btn-export').addEventListener('click', async () => {
+        const text = buildLevelDataText();
+        ioText.value = text;
+        const stageCount = Object.keys(LEVEL_DEFS).length;
+
+        if (supportsFsAccess) {
+            try {
+                const name = await writeViaFsAccess(text);
+                alert('已直接写入「' + name + '」（含全部 ' + stageCount + ' 个关卡）。\n本标签页后续导出会自动覆盖同一文件，无需再次选择。');
+                return;
+            } catch (e) {
+                if (e && e.name === 'AbortError') return;   // user cancelled the picker
+                console.warn('[export] File System Access failed, falling back to download:', e);
+                // fall through to download fallback
+            }
+        }
+
+        // Fallback path (Safari / Firefox / permission denied).
+        downloadAsFallback(text);
         ioText.select();
-        try { document.execCommand('copy'); } catch(e) {}
-        alert('完整的 level_data.gd（含全部 ' + stageKeys.length + ' 个关卡）已导出并复制到剪贴板！\n请用它直接替换整个 level_data.gd 文件的内容。');
+        try { document.execCommand('copy'); } catch (e) {}
+        alert('当前浏览器不支持直接写入本地文件，已改为下载 level_data.gd 到默认下载目录，并把内容复制到剪贴板。\n请把它替换到 scripts/level_data.gd。');
     });
 
     // ── Import Single Tab (lines with double-quotes → current tab only) ────────
@@ -606,7 +666,8 @@
         const parsed = [];
         for (const line of lines) {
             const m = line.match(/"([^"]*)"/);
-            if (m) parsed.push(m[1]);
+            // 导入时静默清除已废弃的拾取物字符（a=苹果, c=樱桃, h=爱心）
+            if (m) parsed.push(m[1].replace(/[ach]/g, ' '));
         }
         if (parsed.length === 0) {
             alert('未找到有效的地图字符串！请确保粘贴的是带双引号的行。');
@@ -621,12 +682,11 @@
         alert('已导入到「' + LEVEL_DEFS[activeStage].name + '」（Stage ' + activeStage + '）。其他关卡数据不受影响。');
     });
 
-    // ── Import All (full level_data.gd → each stage block → correct tab) ──────
-    document.getElementById('btn-import-all').addEventListener('click', () => {
-        const text = ioText.value;
+    function importAllLevelsFromText(text) {
         // Match each stage block:  <stageKey>: [\n ... \n\t],
         const blockRe = /^\s*(\d+)\s*:\s*\[([^\]]*)\]/gms;
         let matched = 0;
+        const importedNames = [];
         let match;
         while ((match = blockRe.exec(text)) !== null) {
             const stageKey = parseInt(match[1]);
@@ -635,7 +695,8 @@
             const parsed = [];
             const lineRe = /"([^"]*)"/g;
             let lm;
-            while ((lm = lineRe.exec(blockText)) !== null) parsed.push(lm[1]);
+            // 导入时静默清除已废弃的拾取物字符（a=苹果, c=樱桃, h=爱心）
+            while ((lm = lineRe.exec(blockText)) !== null) parsed.push(lm[1].replace(/[ach]/g, ' '));
             if (parsed.length === 0) continue;
             const mapData = allMapData[stageKey];
             for (let y = 0; y < ROWS; y++) {
@@ -644,14 +705,60 @@
                 }
             }
             matched++;
+            importedNames.push(LEVEL_DEFS[stageKey].name);
         }
         if (matched === 0) {
             alert('未找到任何关卡数据块。请粘贴完整的 level_data.gd 文件内容。');
-            return;
+            return false;
         }
         renderAll();
-        const names = Object.keys(LEVEL_DEFS).filter(k => parseInt(k) in allMapData).map(k => LEVEL_DEFS[k].name).join('、');
-        alert('已从完整文件导入 ' + matched + ' 个关卡（' + names + '）。\n当前显示「' + LEVEL_DEFS[activeStage].name + '」。');
+        alert('已从完整文件导入 ' + matched + ' 个关卡（' + importedNames.join('、') + '）。\n当前显示「' + LEVEL_DEFS[activeStage].name + '」。');
+        return true;
+    }
+
+    // ── Import All (full level_data.gd → each stage block → correct tab) ──────
+    // Three input sources, tried in order:
+    //   1. Whatever is already pasted into the textarea.
+    //   2. fetch('scripts/level_data.gd') – works when served via http(s)://.
+    //   3. Native file picker – the only option that works under file:// because
+    //      browsers block fetch() of local files for security.
+    const filePicker = document.getElementById('file-picker');
+
+    function handleImportAllText(text) {
+        ioText.value = text;
+        importAllLevelsFromText(text);
+    }
+
+    filePicker.addEventListener('change', () => {
+        const file = filePicker.files && filePicker.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = () => handleImportAllText(String(reader.result || ''));
+        reader.onerror = () => alert('读取文件失败：' + reader.error);
+        reader.readAsText(file);
+        // Reset so picking the same file again still fires "change".
+        filePicker.value = '';
+    });
+
+    document.getElementById('btn-import-all').addEventListener('click', async () => {
+        const pasted = ioText.value;
+        if (pasted.trim().length > 0) {
+            importAllLevelsFromText(pasted);
+            return;
+        }
+        // Try to auto-load from disk via fetch (works under http://).
+        try {
+            const response = await fetch('scripts/level_data.gd', { cache: 'no-store' });
+            if (!response.ok) throw new Error('HTTP ' + response.status);
+            const text = await response.text();
+            handleImportAllText(text);
+            return;
+        } catch (e) {
+            // fetch fails under file:// – fall through to native picker.
+            console.warn('[import-all] fetch failed, falling back to file picker:', e);
+        }
+        // Open native file dialog as fallback.
+        filePicker.click();
     });
 
     // ── Clear Current Tab ──────────────────────────────────────────────────────
@@ -659,6 +766,16 @@
         const name = LEVEL_DEFS[activeStage].name;
         if (!confirm('确定要清空「' + name + '」（Stage ' + activeStage + '）的地图吗？其他关卡数据不受影响。')) return;
         allMapData[activeStage] = Array.from({ length: ROWS }, () => Array(COLS).fill(' '));
+        renderAll();
+    });
+
+    // ── Clear All Tabs ─────────────────────────────────────────────────────────
+    document.getElementById('btn-clear-all').addEventListener('click', () => {
+        const names = Object.keys(LEVEL_DEFS).map(k => LEVEL_DEFS[k].name).join('、');
+        if (!confirm('确定要一键清空所有关卡地图吗？\n将清空：' + names + '。')) return;
+        for (const stageKey of Object.keys(LEVEL_DEFS)) {
+            allMapData[stageKey] = Array.from({ length: ROWS }, () => Array(COLS).fill(' '));
+        }
         renderAll();
     });
 

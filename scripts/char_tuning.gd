@@ -50,6 +50,28 @@ var pz_col_offset_x: float = 12.0
 var pz_col_offset_y: float = -34.0
 var pz_col_width: float = 62.0
 var pz_col_height: float = 118.0
+# Boss（ChapterBoss 关卡的关底大怪）：当前只接入 sprite 缩放 + 位置偏移，
+# 没有碰撞调参（Boss 不参与玩家碰撞/吸入流程，加碰撞之后再补 col_* 字段）。
+# 默认 scale 0.4 是个先验估值；策划用 F1 调好后这里 baked 成新默认。
+var boss_sprite_scale: float = 0.4
+var boss_sprite_offset_x: float = 0.0
+var boss_sprite_offset_y: float = 0.0
+# Boss 被攻击范围（HurtBox）：玩家释放的捕获物命中此矩形时对 Boss 造成伤害。
+# 相对 Boss 节点局部坐标。X/Y 是矩形中心偏移；Width/Height 是矩形尺寸（受 hurt_scale 整体缩放）。
+# 调试可视化：F1 面板可见时，Boss 上会画一个紫色半透明矩形显示当前范围。
+var boss_hurt_offset_x: float = 0.0
+var boss_hurt_offset_y: float = 0.0
+var boss_hurt_width: float = 240.0
+var boss_hurt_height: float = 320.0
+var boss_hurt_scale: float = 1.0
+# Boss Attack2 释放 FireSkull 时的"左手法器圆环"偏移（相对 Boss 全局位置，单位像素）。
+# Boss 当前默认面朝左侧（朝玩家）；左手在角色身体左侧——画面上仍是 -X 方向。
+# 默认值是策划/美术的先验估值，需要在 F1 面板里实际跑动后微调。
+var boss_skull_spawn_offset_x: float = -60.0
+var boss_skull_spawn_offset_y: float = -10.0
+# FireSkull sprite 视觉缩放（飞行 + 喷出 ball 形态共用）。
+# PNG 原图较大，0.18 是策划先验估值；F1 面板可实时调整。
+var boss_skull_scale: float = 0.18
 # 被发射敌人（团状翻滚 ball）的 sprite scale
 var ball_sprite_scale: float = 0.45
 # 主菜单标题图位置与大小（StartPicture_title.png 在 1920×1080 画布上的中心坐标 + 缩放）
@@ -119,6 +141,17 @@ func load_config() -> void:
 	pz_col_offset_y      = cfg.get_value("enemy", "pz_col_offset_y", pz_col_offset_y)
 	pz_col_width         = cfg.get_value("enemy", "pz_col_width", pz_col_width)
 	pz_col_height        = cfg.get_value("enemy", "pz_col_height", pz_col_height)
+	boss_sprite_scale    = cfg.get_value("enemy", "boss_sprite_scale", boss_sprite_scale)
+	boss_sprite_offset_x = cfg.get_value("enemy", "boss_sprite_offset_x", boss_sprite_offset_x)
+	boss_sprite_offset_y = cfg.get_value("enemy", "boss_sprite_offset_y", boss_sprite_offset_y)
+	boss_hurt_offset_x   = cfg.get_value("enemy", "boss_hurt_offset_x", boss_hurt_offset_x)
+	boss_hurt_offset_y   = cfg.get_value("enemy", "boss_hurt_offset_y", boss_hurt_offset_y)
+	boss_hurt_width      = cfg.get_value("enemy", "boss_hurt_width", boss_hurt_width)
+	boss_hurt_height     = cfg.get_value("enemy", "boss_hurt_height", boss_hurt_height)
+	boss_hurt_scale      = cfg.get_value("enemy", "boss_hurt_scale", boss_hurt_scale)
+	boss_skull_spawn_offset_x = cfg.get_value("enemy", "boss_skull_spawn_offset_x", boss_skull_spawn_offset_x)
+	boss_skull_spawn_offset_y = cfg.get_value("enemy", "boss_skull_spawn_offset_y", boss_skull_spawn_offset_y)
+	boss_skull_scale          = cfg.get_value("enemy", "boss_skull_scale", boss_skull_scale)
 	ball_sprite_scale    = cfg.get_value("ball", "ball_sprite_scale", ball_sprite_scale)
 	title_pos_x          = cfg.get_value("ui", "title_pos_x", title_pos_x)
 	title_pos_y          = cfg.get_value("ui", "title_pos_y", title_pos_y)
@@ -171,6 +204,17 @@ func save_config() -> void:
 	cfg.set_value("enemy", "pz_col_offset_y", pz_col_offset_y)
 	cfg.set_value("enemy", "pz_col_width", pz_col_width)
 	cfg.set_value("enemy", "pz_col_height", pz_col_height)
+	cfg.set_value("enemy", "boss_sprite_scale", boss_sprite_scale)
+	cfg.set_value("enemy", "boss_sprite_offset_x", boss_sprite_offset_x)
+	cfg.set_value("enemy", "boss_sprite_offset_y", boss_sprite_offset_y)
+	cfg.set_value("enemy", "boss_hurt_offset_x", boss_hurt_offset_x)
+	cfg.set_value("enemy", "boss_hurt_offset_y", boss_hurt_offset_y)
+	cfg.set_value("enemy", "boss_hurt_width", boss_hurt_width)
+	cfg.set_value("enemy", "boss_hurt_height", boss_hurt_height)
+	cfg.set_value("enemy", "boss_hurt_scale", boss_hurt_scale)
+	cfg.set_value("enemy", "boss_skull_spawn_offset_x", boss_skull_spawn_offset_x)
+	cfg.set_value("enemy", "boss_skull_spawn_offset_y", boss_skull_spawn_offset_y)
+	cfg.set_value("enemy", "boss_skull_scale", boss_skull_scale)
 	cfg.set_value("ball", "ball_sprite_scale", ball_sprite_scale)
 	cfg.set_value("ui", "title_pos_x", title_pos_x)
 	cfg.set_value("ui", "title_pos_y", title_pos_y)

@@ -32,6 +32,11 @@ test_*.png.import
 tuning_test_*.png
 tuning_test_*.png.import
 
+# Ad-hoc Godot SceneTree test scripts (run via `godot --script`),
+# not part of the runtime game.
+test_*.gd
+test_*.gd.uid
+
 # ──────────── OpenCode session/agent files (if any) ────────────
 .opencode/
 .opencode-session/

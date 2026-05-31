@@ -15,6 +15,44 @@ enum Type { METEOR_HAMMER, RED_GHOST, RED_DEVIL, PALACE_ZOMBIE }
 const GRAVITY := 4000.0
 const MH_SPEED := 150.0
 
+# ───────── 跨平台跳跃（HOP）：仅红衣女鬼 / 宫廷僵尸 ─────────
+# 设计：每只敌人独立计时，每隔 PLATFORM_HOP_CHECK_INTERVAL_MIN~MAX 秒
+# 以 PLATFORM_HOP_TRIGGER_PROB 概率触发一次"换平台"。
+# 目标平台从场景中所有平台里**随机**选取（不再依据"自己拥挤"或"目标空旷"），
+# X 同步移动到目标平台中心，Y 由物理 + 跳跃速度推动。
+# 敌人类型限制：仅 Type.RED_GHOST 与 Type.PALACE_ZOMBIE 参与；
+# 流星锤怪（METEOR_HAMMER）与红魔王（RED_DEVIL）不会跨平台跳跃。
+# 总开关；运行时关闭可彻底禁用此机制（调试用）。
+const PLATFORM_HOP_ENABLED := true
+# 每只敌人独立的"是否需要换平台"检查间隔（秒）
+const PLATFORM_HOP_CHECK_INTERVAL_MIN := 1.0
+const PLATFORM_HOP_CHECK_INTERVAL_MAX := 2.5
+# 即使平台已超员，也以一定概率触发（避免所有同时拥挤的敌人一起跳，破坏画面）
+const PLATFORM_HOP_TRIGGER_PROB := 0.98
+# 起跳初速度（Y 负值=向上）。GRAVITY=4000 → 这个速度可达约 (1300^2)/(2*4000) ≈ 211 像素高
+# 一个 tile 行高 10 像素，可越过 ≈ 21 行；足以从下层平台跳到任意上层。
+const PLATFORM_HOP_JUMP_VELOCITY := -1300.0
+# 上跳/下落过程中 X 轴匀速对齐到目标平台中心的速率（像素/秒）
+const PLATFORM_HOP_X_SPEED := 120.0
+# HOP 安全超时：如果某只敌人卡在跳跃中超过此秒数还没落到任何平台，强制结束（防卡死）
+const PLATFORM_HOP_TIMEOUT := 4.0
+# HOP 滞回阈值：避免目标 Y 与当前 Y 几乎相同时被错判为 DOWN（同层换位）
+const PLATFORM_HOP_DOWN_HYSTERESIS := 8.0
+# HOP 类型：UP=直接施加跳跃速度；DOWN=穿透单向平台往下落
+enum HopMode { UP, DOWN }
+var is_hopping: bool = false
+var _hop_mode: int = HopMode.UP
+var _hop_target_x: float = 0.0   # 目标平台中心 X
+var _hop_target_y: float = 0.0   # 目标平台站立面 Y（用于落地判定容差）
+var _hop_target_left: float = 0.0
+var _hop_target_right: float = 0.0
+var _hop_timer: float = 0.0      # 已进入 HOP 的累计时长（超过 TIMEOUT 强制结束）
+var _hop_check_timer: float = 0.0
+var _hop_check_interval: float = 0.0
+# 缓存 Level 节点引用（懒加载；找不到则放弃 hop 机制，不阻塞其他逻辑）
+var _level_ref: Node = null
+var _level_lookup_done: bool = false
+
 @onready var sprite: Sprite2D = $Sprite
 @onready var anim_timer: Timer = $AnimTimer
 @onready var ground_check: RayCast2D = $GroundCheck
@@ -29,6 +67,15 @@ var dying: bool = false
 var charging: bool = false
 var charge_cooldown: float = 0.0
 var initial_y: float = 0.0
+
+# Boss 召唤的小怪 spawn 后短暂"豁免期"：避免被场上残留的 ball
+# （player.gd 投掷出来翻滚 2s 的攻击物）在 spawn 那一帧立刻 die() 抹掉。
+# Boss_Attack1 召唤 4 只敌人时，正好玩家可能刚发射 ball 攻击 Boss，
+# ball 沿水平方向飞 1500px/s 经过多个平台，会在 spawn 后下一物理帧
+# 同时秒杀 1~4 只刚出现的敌人 → 玩家看到"敌人完全没出现"。
+# 默认 0（普通敌人不需要）；level.spawn_summoned_enemy() 会显式置为 SUMMON_INVULN_TIME。
+const SUMMON_INVULN_TIME := 0.4
+var summon_invuln_t: float = 0.0
 var bat_oscillation_t: float = 0.0
 var player_ref: Node2D = null
 
@@ -394,6 +441,12 @@ const CAPTURE_FRAME_INTERVAL := {
 	Type.METEOR_HAMMER: 0.125,
 }
 
+# 各敌人在 idle/move/die/attack 等普通状态下的额外 scale 乘子
+# 默认（未列出的敌人）所有状态 mul=1.0，即 sprite.scale = base_scale
+# 注意：MeteorHammer 历史上曾对 idle/move/die 乘 0.90 来缩小，导致 idle 视觉比 attack 小一截；
+# 现已统一为 1.0，所有状态使用同一基准 scale，体积保持一致。
+const NORMAL_SCALE_MUL := {}
+
 # capture 状态下 sprite 的额外缩放补偿（当 capture 美术画布与 idle 不同尺寸时用）
 # 当前 RedGhost idle/capture_f/capture_b 都统一为 500×500 → 无需补偿，全部 1.0
 # （未来若有敌人的 capture 画布与 idle 不同，按需在此字典里加 mul）
@@ -445,13 +498,16 @@ func _ready() -> void:
 	if TEX[enemy_type].has("mh_hammer"):
 		for path in TEX[enemy_type]["mh_hammer"]:
 			_mh_hammer_frames.append(load(path))
-	sprite.texture = _frames[0]
+	_apply_normal_texture(_frames[0], "move")
 	anim_timer.timeout.connect(_on_anim_tick)
 	anim_timer.start()
 	initial_y = global_position.y
 	# 初始化 walk 状态计时（每个敌人各自随机起跑，避免整张图同步切换）
 	state_duration = randf_range(WALK_DURATION_MIN, WALK_DURATION_MAX)
 	state_timer = randf_range(0.0, state_duration * 0.5)  # 随机初始 phase
+	# 初始化 hop 检查计时（每只敌人随机错开第一次检查，避免整波同步换平台）
+	_hop_check_interval = randf_range(PLATFORM_HOP_CHECK_INTERVAL_MIN, PLATFORM_HOP_CHECK_INTERVAL_MAX)
+	_hop_check_timer = randf_range(0.0, _hop_check_interval)
 	# 不在此处获取 player_ref：敌人可能在 player 之前被实例化 (level grid 顺序)
 	# 改为在 _apply_capture_texture 中按需懒加载
 
@@ -464,7 +520,7 @@ func _apply_tuning() -> void:
 	var skip_sprite: bool = is_being_shrunk
 	if enemy_type == Type.METEOR_HAMMER:
 		if not skip_sprite:
-			sprite.scale = Vector2(CharTuning.mh_sprite_scale, CharTuning.mh_sprite_scale)
+			_apply_current_normal_scale()
 			sprite.position = Vector2(CharTuning.mh_sprite_offset_x, CharTuning.mh_sprite_offset_y)
 		if collision and collision.shape is RectangleShape2D:
 			collision.position = Vector2(CharTuning.mh_col_offset_x, CharTuning.mh_col_offset_y)
@@ -584,7 +640,17 @@ var _was_frozen: bool = false
 # 持续被钟馗"真正吸引"的累计时间（秒）；中断（脱离吸气区/玩家松开）→ 归零
 # 累计 ≥ SUCTION_CAPTURE_TIME 时算捕获成功，进入 in-flight 飞向葫芦阶段
 var suction_hold_timer: float = 0.0
-const SUCTION_CAPTURE_TIME := 1.0
+const SUCTION_CAPTURE_TIME := 1.0  # 默认/兜底值
+# 按敌人类型区分的捕获时长：流星锤怪 2s、红魔 3s，其余维持 1s
+const SUCTION_CAPTURE_TIME_BY_TYPE := {
+	Type.METEOR_HAMMER: 2.0,
+	Type.RED_DEVIL:     3.0,
+	Type.RED_GHOST:     1.0,
+	Type.PALACE_ZOMBIE: 1.0,
+}
+
+func get_suction_capture_time() -> float:
+	return SUCTION_CAPTURE_TIME_BY_TYPE.get(enemy_type, SUCTION_CAPTURE_TIME)
 # 捕获成功后的"飞向葫芦"阶段：敌人朝 vanish_world 飞 + 缩小，与玩家是否仍按吸键无关
 # 完成后 is_captured = true + hide()，玩家可以发射
 var is_in_flight: bool = false
@@ -605,6 +671,9 @@ var _has_suction_vanish: bool = false
 func _physics_process(delta: float) -> void:
 	if dying or is_captured:
 		return
+	# 召唤豁免期倒数：让 spawn 后头几帧不被 ball.die() 抹掉
+	if summon_invuln_t > 0.0:
+		summon_invuln_t = max(0.0, summon_invuln_t - delta)
 	# 上一帧被吸缩小过，本帧却没继续被吸 → 恢复正常尺寸
 	if _was_being_shrunk and not is_being_shrunk:
 		reset_suction_shrink()
@@ -671,6 +740,27 @@ func _physics_process(delta: float) -> void:
 
 func _process_walking_enemy(delta: float) -> void:
 	velocity.y += GRAVITY * delta
+	# ── HOP：跨平台跳跃 ──
+	# 已在跳跃中：由 _tick_platform_hop 接管移动，不进入巡逻状态机/技能分支。
+	if is_hopping:
+		_tick_platform_hop(delta)
+		return
+	# 不在跳跃中：每隔一段时间随机检查一次"是否该换平台"。
+	# 仅在 WALK / IDLE 状态触发（避免打断 ATTACK / DASH / MH_ATTACK 这些技能动画）。
+	# 类型限制：仅红衣女鬼 / 宫廷僵尸 参与跨平台跳跃。
+	if PLATFORM_HOP_ENABLED \
+			and (enemy_type == Type.RED_GHOST or enemy_type == Type.PALACE_ZOMBIE) \
+			and (anim_state == AnimState.WALK or anim_state == AnimState.IDLE) \
+			and is_on_floor():
+		_hop_check_timer += delta
+		if _hop_check_timer >= _hop_check_interval:
+			_hop_check_timer = 0.0
+			_hop_check_interval = randf_range(
+				PLATFORM_HOP_CHECK_INTERVAL_MIN, PLATFORM_HOP_CHECK_INTERVAL_MAX)
+			_try_platform_hop()
+			if is_hopping:
+				_tick_platform_hop(delta)
+				return
 	if not is_being_sucked:
 		# walk/idle/attack 行为状态机：随机切换 → 控制是否移动
 		_tick_walk_idle_state_machine(delta)
@@ -735,7 +825,7 @@ func _tick_walk_idle_state_machine(delta: float) -> void:
 			# idle 进入瞬间立刻显示 idle 帧首帧（不等 _on_anim_tick）
 			anim_frame = 0
 			if not _idle_frames.is_empty():
-				sprite.texture = _idle_frames[0]
+				_apply_normal_texture(_idle_frames[0], "idle")
 	elif anim_state == AnimState.IDLE:
 		# IDLE → WALK
 		anim_state = AnimState.WALK
@@ -745,7 +835,7 @@ func _tick_walk_idle_state_machine(delta: float) -> void:
 			direction = -direction
 		anim_frame = 0
 		if not _frames.is_empty():
-			sprite.texture = _frames[0]
+			_apply_normal_texture(_frames[0], "move")
 	# ATTACK / DASH 状态由各自的 tick 函数自行处理 → WALK 的过渡，不在此分支处理
 
 # 进入 ATTACK 状态：初始化攻击动画累加器，显示 attack 首帧
@@ -756,7 +846,7 @@ func _enter_attack_state() -> void:
 	_attack_frame_idx = 0
 	_attack_spawned = false
 	if not _attack_frames.is_empty():
-		sprite.texture = _attack_frames[0]
+		_apply_normal_texture(_attack_frames[0], "attack")
 	# state_duration 在此不再有意义（ATTACK 自己管动画完成）；设个上限避免卡死
 	state_duration = ATTACK_FRAME_INTERVAL * _attack_frames.size() + 0.5
 	state_timer = 0.0
@@ -776,7 +866,7 @@ func _tick_attack_anim(delta: float) -> bool:
 			# 动画播完 → 切回 WALK
 			_exit_attack_to_walk()
 			return false
-		sprite.texture = _attack_frames[_attack_frame_idx]
+		_apply_normal_texture(_attack_frames[_attack_frame_idx], "attack")
 		# 在指定帧触发火种生成（只触发一次，防止跳帧重复）
 		# 仅 PalaceZombie 的 ATTACK 会射火种；红魔王 ATTACK 是近战挥击狼牙棒，无投射物
 		if not _attack_spawned and _attack_frame_idx >= ATTACK_SPAWN_FRAME:
@@ -791,7 +881,7 @@ func _exit_attack_to_walk() -> void:
 	state_timer = 0.0
 	anim_frame = 0
 	if not _frames.is_empty():
-		sprite.texture = _frames[0]
+		_apply_normal_texture(_frames[0], "move")
 
 # ───────── 红衣女鬼 DASH 技能（消失 → 突进 3 身位 → flutter 显现 → 回 WALK） ─────────
 
@@ -887,7 +977,7 @@ func _exit_dash_to_walk() -> void:
 	state_timer = 0.0
 	anim_frame = 0
 	if not _frames.is_empty():
-		sprite.texture = _frames[0]
+		_apply_normal_texture(_frames[0], "move")
 
 # ───────── 流星锤怪 MH_ATTACK 技能（预备 → 扔锤 → 收锤 → 回 WALK） ─────────
 
@@ -900,7 +990,7 @@ func _enter_mh_attack_state() -> void:
 	_mh_hammer_frame_idx = 0
 	_mh_hammer_anim_accum = 0.0
 	if not _mh_attack_frames.is_empty():
-		sprite.texture = _mh_attack_frames[0]
+		_apply_normal_texture(_mh_attack_frames[0], "mh_attack")
 	velocity = Vector2.ZERO
 	# state_duration 给个大上限（防止异常情况卡死）；正常由 _tick_mh_attack 自行退出
 	state_duration = 10.0
@@ -932,7 +1022,7 @@ func _advance_mh_char_frame() -> void:
 			if _mh_hammer_node == null:
 				_enter_mh_throw_out()
 		else:
-			sprite.texture = _mh_attack_frames[_mh_char_frame_idx]
+			_apply_normal_texture(_mh_attack_frames[_mh_char_frame_idx], "mh_attack")
 			# 播到第 21 帧（index 20）→ 切到 THROW_OUT 子阶段 + 生成锤
 			if _mh_char_frame_idx == MH_THROW_TRIGGER_FRAME and _mh_hammer_node == null:
 				_enter_mh_throw_out()
@@ -941,7 +1031,7 @@ func _advance_mh_char_frame() -> void:
 		_mh_char_frame_idx += 1
 		if _mh_char_frame_idx > MH_LOOP_FRAME_END:
 			_mh_char_frame_idx = MH_LOOP_FRAME_START
-		sprite.texture = _mh_attack_frames[_mh_char_frame_idx]
+		_apply_normal_texture(_mh_attack_frames[_mh_char_frame_idx], "mh_attack")
 
 # 切到 THROW_OUT 阶段：生成锤子节点，初始位置在怪手部
 func _enter_mh_throw_out() -> void:
@@ -1061,6 +1151,9 @@ func _spawn_mh_hammer() -> void:
 
 # 锤碰到玩家 → 扣血（仅在玩家非无敌且非吸气中时生效，与 fire_seed 同语义）
 func _on_mh_hammer_hit_player(body: Node) -> void:
+	if body is Boss and not body.dying:
+		body.take_damage(1)
+		return
 	if not (body is Player):
 		return
 	if body.invincible or body.is_vacuuming:
@@ -1081,7 +1174,7 @@ func _exit_mh_attack_to_walk() -> void:
 	state_timer = 0.0
 	anim_frame = 0
 	if not _frames.is_empty():
-		sprite.texture = _frames[0]
+		_apply_normal_texture(_frames[0], "move")
 
 # ───────── 火种生成（PalaceZombie ATTACK 状态用） ─────────
 
@@ -1140,9 +1233,127 @@ func _has_ground_ahead() -> bool:
 	ground_check.force_raycast_update()
 	return ground_check.is_colliding()
 
+# ───────── 跨平台跳跃（HOP） ─────────
+# 懒加载：向上查找含 get_platforms 方法的祖先节点（即 Level）
+func _get_level() -> Node:
+	if _level_lookup_done:
+		return _level_ref
+	_level_lookup_done = true
+	var n := get_parent()
+	while n != null:
+		if n.has_method("get_platforms"):
+			_level_ref = n
+			break
+		n = n.get_parent()
+	return _level_ref
+
+# 检查是否需要换平台。条件：
+#   1. 当前敌人类型在允许列表（仅 RED_GHOST / PALACE_ZOMBIE）
+#   2. 通过随机概率 PLATFORM_HOP_TRIGGER_PROB
+#   3. 能定位到当前所在平台
+#   4. 场景中存在至少一个其他平台
+# 满足 → 随机选一个其他平台进入 is_hopping 状态。
+# 注意：流星锤怪 / 红魔王不参与跨平台跳跃；不再使用"自己平台拥挤"或
+# "目标平台空旷"的判定，目标完全随机。
+func _try_platform_hop() -> void:
+	# 仅限红衣女鬼 与 宫廷僵尸
+	if enemy_type != Type.RED_GHOST and enemy_type != Type.PALACE_ZOMBIE:
+		return
+	if randf() >= PLATFORM_HOP_TRIGGER_PROB:
+		return  # 概率没中
+	var level := _get_level()
+	if level == null:
+		return
+	var here = level.find_platform_for(global_position)
+	if here == null:
+		return
+	var target = level.pick_random_other_platform(here["id"])
+	if target == null:
+		return  # 场景里只有一个平台
+	_begin_hop(target)
+
+# 进入 HOP 状态：根据目标平台 Y 决定向上还是向下穿越。
+func _begin_hop(target: Dictionary) -> void:
+	is_hopping = true
+	_hop_timer = 0.0
+	_hop_target_x = target["center_x"]
+	_hop_target_y = target["top_y"]
+	_hop_target_left = target["left_x"]
+	_hop_target_right = target["right_x"]
+	# 中断当前所有"原地动作"型状态，回到 WALK，避免技能子计时器残留
+	if anim_state != AnimState.WALK:
+		anim_state = AnimState.WALK
+		state_timer = 0.0
+		state_duration = randf_range(WALK_DURATION_MIN, WALK_DURATION_MAX)
+	# 朝目标方向调整朝向（视觉合理，不影响 hop 自身物理）
+	if _hop_target_x > global_position.x:
+		direction = 1
+	else:
+		direction = -1
+	# 目标平台站立面 Y 比当前低（数值更大）→ 向下；否则向上
+	if _hop_target_y > global_position.y + PLATFORM_HOP_DOWN_HYSTERESIS:
+		_hop_mode = HopMode.DOWN
+		# 下穿单向平台：把碰撞盒推到平台之下，并给一个朝下的初速度（参考 player.gd:563）
+		# 注意：实心 tile（GrassSrc/DirtSrc）不能下穿，敌人此时若站在实心 tile 上会被卡住，
+		# 但下层若是 PlatformSrc(one-way) 就能穿过。这里做最朴素的处理；卡住会在 TIMEOUT 强制退出。
+		global_position.y += 10.0
+		velocity.y = 400.0
+	else:
+		_hop_mode = HopMode.UP
+		velocity.y = PLATFORM_HOP_JUMP_VELOCITY
+
+# HOP 中每帧推进：X 朝目标对齐，Y 任由重力 / 跳跃速度推动；
+# 落到目标平台（脚部 Y 接近 top_y 且 X 在范围内 且 is_on_floor）→ 结束 HOP。
+func _tick_platform_hop(delta: float) -> void:
+	_hop_timer += delta
+	# X 轴：朝目标 center_x 匀速移动，到达后停下
+	var dx := _hop_target_x - global_position.x
+	if abs(dx) > 1.0:
+		velocity.x = sign(dx) * PLATFORM_HOP_X_SPEED
+	else:
+		velocity.x = 0.0
+	# 视觉朝向跟运动方向走
+	sprite.flip_h = (sign(dx) < 0) if default_facing_right else (sign(dx) > 0)
+	move_and_slide()
+	# 结束条件 1：超时强制结束（防极端地形卡住）
+	if _hop_timer >= PLATFORM_HOP_TIMEOUT:
+		_end_hop()
+		return
+	# 结束条件 2：在地面上、X 已在目标平台站立面范围内、Y 站立面接近目标
+	if is_on_floor() and velocity.y >= 0.0:
+		var on_target_x: bool = global_position.x >= _hop_target_left - 5.0 \
+				and global_position.x <= _hop_target_right + 5.0
+		var on_target_y: bool = abs(global_position.y - _hop_target_y) <= 14.0
+		if on_target_x and on_target_y:
+			_end_hop()
+			return
+		# 兜底：UP 模式下若已落到任意平台（不一定是目标），也接受 —— 避免反复尝试卡死
+		if _hop_mode == HopMode.UP and _hop_timer > 0.6:
+			_end_hop()
+
+func _end_hop() -> void:
+	is_hopping = false
+	_hop_timer = 0.0
+	velocity.x = 0.0
+	# 重置巡逻状态时长，让敌人在新平台上稳定走一段时间再考虑技能
+	state_timer = 0.0
+	state_duration = randf_range(WALK_DURATION_MIN, WALK_DURATION_MAX)
+	# hop 后给一个较长的换平台冷却，避免立刻再次起跳
+	_hop_check_timer = 0.0
+	_hop_check_interval = randf_range(
+		PLATFORM_HOP_CHECK_INTERVAL_MIN, PLATFORM_HOP_CHECK_INTERVAL_MAX)
+
+# ───────── 以上：跨平台跳跃 ─────────
+
 func freeze_for_suction() -> void:
 	if is_captured or dying:
 		return
+	# 被吸住的流星锤攻击元素可反打 Boss：吸到锤子时按一次命中处理。
+	if anim_state == AnimState.MH_ATTACK and _mh_hammer_area != null and is_instance_valid(_mh_hammer_area):
+		for body in _mh_hammer_area.get_overlapping_bodies():
+			if body is Boss and not body.dying:
+				body.take_damage(1)
+				break
 	# 若敌人正在 DASH（红衣女鬼突进）→ 立即中断技能，恢复显示，让玩家能看到被吸的敌人
 	# 否则 sprite 在 VANISH 阶段 hidden，被吸时玩家看不到敌人
 	if anim_state == AnimState.DASH:
@@ -1209,14 +1420,12 @@ func _restore_idle_texture() -> void:
 		anim_frame = 0
 	if is_captured or dying:
 		return
-	# 还原 sprite 的 base scale（capture 期间可能被乘了 capture_mul 补偿）
-	var base: float = _get_base_sprite_scale()
-	sprite.scale = Vector2(base, base)
 	# 按当前 walk/idle 状态恢复对应帧
 	var frames: Array = _idle_frames if anim_state == AnimState.IDLE else _frames
 	if frames.is_empty():
 		return
-	sprite.texture = frames[anim_frame % frames.size()]
+	var key: String = "idle" if anim_state == AnimState.IDLE else "move"
+	_apply_normal_texture(frames[anim_frame % frames.size()], key)
 
 # 根据"敌人是否面对钟馗"切换 capture_front / capture_back 纹理
 # 假设 capture_*.png 原图朝向钟馗的方向是"右"；按 direction 决定 flip_h
@@ -1262,6 +1471,31 @@ func _get_capture_scale_mul() -> float:
 		return 1.0
 	var per_enemy: Dictionary = CAPTURE_SCALE_MUL[enemy_type]
 	return per_enemy.get(_capture_key, 1.0)
+
+func _get_normal_scale_mul(key: String) -> float:
+	if not NORMAL_SCALE_MUL.has(enemy_type):
+		return 1.0
+	var per_enemy: Dictionary = NORMAL_SCALE_MUL[enemy_type]
+	return per_enemy.get(key, 1.0)
+
+func _apply_normal_scale(key: String) -> void:
+	var base: float = _get_base_sprite_scale()
+	var mul: float = _get_normal_scale_mul(key)
+	sprite.scale = Vector2(base * mul, base * mul)
+
+func _apply_current_normal_scale() -> void:
+	if is_being_shrunk or is_frozen or _was_being_shrunk or _was_frozen:
+		return
+	if anim_state == AnimState.MH_ATTACK:
+		_apply_normal_scale("mh_attack")
+	elif anim_state == AnimState.IDLE:
+		_apply_normal_scale("idle")
+	else:
+		_apply_normal_scale("move")
+
+func _apply_normal_texture(texture: Texture2D, key: String) -> void:
+	sprite.texture = texture
+	_apply_normal_scale(key)
 
 func _get_base_sprite_scale() -> float:
 	match enemy_type:
@@ -1332,7 +1566,7 @@ func die() -> void:
 	anim_timer.stop()
 	var die_tex = TEX[enemy_type]["die"]
 	for i in range(die_tex.size()):
-		sprite.texture = load(die_tex[i])
+		_apply_normal_texture(load(die_tex[i]), "die")
 		await get_tree().create_timer(0.1).timeout
 	queue_free()
 
@@ -1358,7 +1592,7 @@ func _on_anim_tick() -> void:
 		if _idle_frames.is_empty():
 			return
 		anim_frame = (anim_frame + 1) % _idle_frames.size()
-		sprite.texture = _idle_frames[anim_frame]
+		_apply_normal_texture(_idle_frames[anim_frame], "idle")
 		return
 	if _frames.is_empty():
 		return
@@ -1366,7 +1600,7 @@ func _on_anim_tick() -> void:
 	if WALK_INTERMITTENT.has(enemy_type):
 		return
 	anim_frame = (anim_frame + 1) % _frames.size()
-	sprite.texture = _frames[anim_frame]
+	_apply_normal_texture(_frames[anim_frame], "move")
 
 # 间歇式 walk 动画推进（"跳一下→立定→再跳"节奏）+ 同步 velocity.x（立定时不动）
 # 返回 true 表示当前处于立定停留期（外部物理应让 velocity.x = 0）
@@ -1381,7 +1615,7 @@ func _tick_walk_intermittent_anim(delta: float) -> bool:
 		# 立定停留：维持第 1 帧，直到 idle_interval 满
 		if anim_frame != 0:
 			anim_frame = 0
-			sprite.texture = _frames[0]
+			_apply_normal_texture(_frames[0], "move")
 		if _walk_intermittent_timer >= idle_interval:
 			_walk_intermittent_timer -= idle_interval
 			_walk_intermittent_playing = true
@@ -1394,11 +1628,11 @@ func _tick_walk_intermittent_anim(delta: float) -> bool:
 		if anim_frame >= _frames.size():
 			# 一轮跳跃完成：回到第 1 帧，进入立定停留
 			anim_frame = 0
-			sprite.texture = _frames[0]
+			_apply_normal_texture(_frames[0], "move")
 			_walk_intermittent_playing = false
 			_walk_intermittent_timer = 0.0
 			return true   # 立刻进入立定
-		sprite.texture = _frames[anim_frame]
+		_apply_normal_texture(_frames[anim_frame], "move")
 	return false   # 仍在跳跃阶段，外部物理正常移动
 
 # 自定义 capture 序列帧推进（覆盖默认 AnimTimer 节奏，对配置了 CAPTURE_FRAME_INTERVAL 的敌人生效）

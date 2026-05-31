@@ -8,7 +8,7 @@ extends Control
 #   [帧 273 ~ 278] CgLayer alpha 线性从 1.0 → 0.0（6 帧衰减）
 #   [帧 278 播完]  alpha = 0.0，BgLayer 已完整露出，自动切换 main.tscn
 #
-# 跳过：任意时刻按 ui_accept（回车/空格）立即切换 main.tscn
+# 跳过：任意时刻按 ui_accept（回车/空格）立即停止 CGv1.mp3 并切换 main.tscn
 # ═══════════════════════════════════════════════════════════════════════════
 
 const MAIN_MENU_PATH := "res://scenes/main.tscn"
@@ -50,12 +50,24 @@ func _ready() -> void:
 	ResourceLoader.load_threaded_request(MAIN_MENU_PATH)
 
 	# 加载 StartBackground 帧（46 帧，全部已 import，瞬间完成）
+	# 这些 Texture2D 资源会被 ResourceLoader 缓存（弱引用），后续 main_menu 再
+	# load() 时直接命中缓存，避免切场景瞬间重复解码导致的卡顿。
 	_bg_frames = []
 	for i in range(1, BG_FRAME_COUNT + 1):
 		var path := "res://assets/sprites/Start/StartBackground/StartBackground_%02d.jpg" % i
 		_bg_frames.append(load(path))
 	if not _bg_frames.is_empty():
 		bg_layer.texture = _bg_frames[0]
+		# 在 CG 期间把每张 BG 都贴上 bg_layer 一次，强制 GPU 完成纹理上传 / 预热，
+		# 这样切到 main_menu 时第一帧不会因首次上传 1920×1080×46 而卡顿。
+		# 利用 RenderingServer 直接获取 RID，无需真的渲染。
+		for tex in _bg_frames:
+			if tex != null:
+				# 触发底层 RID 创建（Texture2D.get_rid() 会确保 GPU 资源就绪）
+				var _rid := (tex as Texture2D).get_rid()
+
+	# 存入 autoload 共享缓存，main_menu 切场景后直接复用，零 IO 零卡顿
+	GameState.shared_start_bg_frames = _bg_frames
 
 	# 加载 CG 帧（279 帧，~50MB JPEG，同步 load）
 	_cg_frames = []
@@ -121,14 +133,35 @@ func _process(delta: float) -> void:
 func _input(event: InputEvent) -> void:
 	if event.is_action_pressed("ui_accept"):
 		get_viewport().set_input_as_handled()
-		_finish()
+		# 玩家按回车跳过：终止 CGv1.mp3 播放
+		_finish(true)
 
-func _finish() -> void:
+func _finish(skipped: bool = false) -> void:
 	if _cg_done:
 		return
 	_cg_done = true
-	if music.playing:
-		music.stop()
+
+	if skipped:
+		# 跳过：立即停止 CGv1.mp3，音乐随场景释放即可
+		if music != null:
+			if music.playing:
+				music.stop()
+			# 不 reparent，cg_intro 释放时 music 节点一并被回收
+	else:
+		# 正常播完：把 Music 节点 reparent 到 SceneTree.root，使其脱离当前场景，
+		# 不会随 cg_intro 一起被释放。播放结束后自动 queue_free。
+		if music != null and music.playing:
+			var root := get_tree().root
+			music.get_parent().remove_child(music)
+			root.add_child(music)
+			music.process_mode = Node.PROCESS_MODE_ALWAYS
+			# 一次性连接：mp3 播完自动清理
+			if not music.finished.is_connected(music.queue_free):
+				music.finished.connect(music.queue_free)
+		elif music != null:
+			# 如果没在播放（极端情况），直接释放
+			music.queue_free()
+
 	# 用后台已预加载的 PackedScene 切换（无磁盘读取，零卡顿）
 	var packed: PackedScene = ResourceLoader.load_threaded_get(MAIN_MENU_PATH)
 	if packed != null:
