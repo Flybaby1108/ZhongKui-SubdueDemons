@@ -479,7 +479,7 @@ func _ready() -> void:
 			_idle_frames.append(load(path))
 	if _idle_frames.is_empty():
 		_idle_frames = _frames
-	# 加载 attack 帧（仅 PALACE_ZOMBIE 配置；其他敌人 _attack_frames 留空 → 不会进入 ATTACK 状态）
+	# 加载 attack 帧（有 attack 配置的敌人会进入 ATTACK 状态）
 	_attack_frames = []
 	if TEX[enemy_type].has("attack"):
 		for path in TEX[enemy_type]["attack"]:
