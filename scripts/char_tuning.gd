@@ -1,6 +1,9 @@
 extends Node
 
 const CONFIG_PATH := "user://char_tuning.cfg"
+# Browser builds keep user:// across GitHub Pages deployments. Increment this
+# whenever baked enemy calibration must replace previously saved Web values.
+const ENEMY_TUNING_VERSION := 1
 
 signal tuning_changed
 
@@ -8,7 +11,8 @@ signal tuning_changed
 # DEFAULT VALUES (baked from designer's local user://char_tuning.cfg, May 2026)
 # 这些默认值是设计师在 F1 调参面板里实际调好的数值，已 baked 进代码作为出厂默认。
 # 玩家首次启动（user://char_tuning.cfg 不存在时）用这些值；之后 F1 调参会写回 user://
-# 覆盖默认值。CI/Web 版没有用户 cfg，因此只看这里的值——必须与设计师本地保持一致。
+# 覆盖默认值。Web 版的 user:// 也会跨部署保留；敌人出厂校准变化时必须递增
+# ENEMY_TUNING_VERSION，让旧的敌人尺寸和碰撞范围自动迁移。
 # 若要重新出厂校准：1) 用 F1 调好  2) 复制 user://char_tuning.cfg 数值过来覆盖这里。
 # ─────────────────────────────────────────────────────────────────────────
 var sprite_scale: float = 0.34
@@ -102,6 +106,9 @@ func load_config() -> void:
 	var err := cfg.load(CONFIG_PATH)
 	if err != OK:
 		return
+	var enemy_tuning_is_current: bool = (
+		cfg.get_value("meta", "enemy_tuning_version", 0) == ENEMY_TUNING_VERSION
+	)
 	sprite_scale         = cfg.get_value("char", "sprite_scale", sprite_scale)
 	sprite_offset_x      = cfg.get_value("char", "sprite_offset_x", sprite_offset_x)
 	sprite_offset_y      = cfg.get_value("char", "sprite_offset_y", sprite_offset_y)
@@ -116,55 +123,61 @@ func load_config() -> void:
 	inhale_fx_scale      = cfg.get_value("char", "inhale_fx_scale", inhale_fx_scale)
 	inhale_fx_offset_x   = cfg.get_value("char", "inhale_fx_offset_x", inhale_fx_offset_x)
 	inhale_fx_offset_y   = cfg.get_value("char", "inhale_fx_offset_y", inhale_fx_offset_y)
-	mh_sprite_scale      = cfg.get_value("enemy", "mh_sprite_scale", mh_sprite_scale)
-	mh_sprite_offset_x   = cfg.get_value("enemy", "mh_sprite_offset_x", mh_sprite_offset_x)
-	mh_sprite_offset_y   = cfg.get_value("enemy", "mh_sprite_offset_y", mh_sprite_offset_y)
-	mh_col_offset_x      = cfg.get_value("enemy", "mh_col_offset_x", mh_col_offset_x)
-	mh_col_offset_y      = cfg.get_value("enemy", "mh_col_offset_y", mh_col_offset_y)
-	mh_col_width         = cfg.get_value("enemy", "mh_col_width", mh_col_width)
-	mh_col_height        = cfg.get_value("enemy", "mh_col_height", mh_col_height)
-	rg_sprite_scale      = cfg.get_value("enemy", "rg_sprite_scale", rg_sprite_scale)
-	rg_sprite_offset_y   = cfg.get_value("enemy", "rg_sprite_offset_y", rg_sprite_offset_y)
-	rg_col_offset_x      = cfg.get_value("enemy", "rg_col_offset_x", rg_col_offset_x)
-	rg_col_offset_y      = cfg.get_value("enemy", "rg_col_offset_y", rg_col_offset_y)
-	rg_col_width         = cfg.get_value("enemy", "rg_col_width", rg_col_width)
-	rg_col_height        = cfg.get_value("enemy", "rg_col_height", rg_col_height)
-	rd_sprite_scale      = cfg.get_value("enemy", "rd_sprite_scale", rd_sprite_scale)
-	rd_sprite_offset_y   = cfg.get_value("enemy", "rd_sprite_offset_y", rd_sprite_offset_y)
-	rd_col_offset_x      = cfg.get_value("enemy", "rd_col_offset_x", rd_col_offset_x)
-	rd_col_offset_y      = cfg.get_value("enemy", "rd_col_offset_y", rd_col_offset_y)
-	rd_col_width         = cfg.get_value("enemy", "rd_col_width", rd_col_width)
-	rd_col_height        = cfg.get_value("enemy", "rd_col_height", rd_col_height)
-	pz_sprite_scale      = cfg.get_value("enemy", "pz_sprite_scale", pz_sprite_scale)
-	pz_sprite_offset_y   = cfg.get_value("enemy", "pz_sprite_offset_y", pz_sprite_offset_y)
-	pz_col_offset_x      = cfg.get_value("enemy", "pz_col_offset_x", pz_col_offset_x)
-	pz_col_offset_y      = cfg.get_value("enemy", "pz_col_offset_y", pz_col_offset_y)
-	pz_col_width         = cfg.get_value("enemy", "pz_col_width", pz_col_width)
-	pz_col_height        = cfg.get_value("enemy", "pz_col_height", pz_col_height)
-	boss_sprite_scale    = cfg.get_value("enemy", "boss_sprite_scale", boss_sprite_scale)
-	boss_sprite_offset_x = cfg.get_value("enemy", "boss_sprite_offset_x", boss_sprite_offset_x)
-	boss_sprite_offset_y = cfg.get_value("enemy", "boss_sprite_offset_y", boss_sprite_offset_y)
-	boss_hurt_offset_x   = cfg.get_value("enemy", "boss_hurt_offset_x", boss_hurt_offset_x)
-	boss_hurt_offset_y   = cfg.get_value("enemy", "boss_hurt_offset_y", boss_hurt_offset_y)
-	boss_hurt_width      = cfg.get_value("enemy", "boss_hurt_width", boss_hurt_width)
-	boss_hurt_height     = cfg.get_value("enemy", "boss_hurt_height", boss_hurt_height)
-	boss_hurt_scale      = cfg.get_value("enemy", "boss_hurt_scale", boss_hurt_scale)
-	boss_skull_spawn_offset_x = cfg.get_value("enemy", "boss_skull_spawn_offset_x", boss_skull_spawn_offset_x)
-	boss_skull_spawn_offset_y = cfg.get_value("enemy", "boss_skull_spawn_offset_y", boss_skull_spawn_offset_y)
-	boss_skull_scale          = cfg.get_value("enemy", "boss_skull_scale", boss_skull_scale)
 	ball_sprite_scale    = cfg.get_value("ball", "ball_sprite_scale", ball_sprite_scale)
 	title_pos_x          = cfg.get_value("ui", "title_pos_x", title_pos_x)
 	title_pos_y          = cfg.get_value("ui", "title_pos_y", title_pos_y)
 	title_scale          = cfg.get_value("ui", "title_scale", title_scale)
 	vanish_point_offset_x = cfg.get_value("char", "vanish_point_offset_x", vanish_point_offset_x)
 	vanish_point_offset_y = cfg.get_value("char", "vanish_point_offset_y", vanish_point_offset_y)
-	mh_hammer_scale     = cfg.get_value("enemy", "mh_hammer_scale", mh_hammer_scale)
-	mh_hammer_offset_x  = cfg.get_value("enemy", "mh_hammer_offset_x", mh_hammer_offset_x)
-	mh_hammer_offset_y  = cfg.get_value("enemy", "mh_hammer_offset_y", mh_hammer_offset_y)
-	mh_hammer_head_size = cfg.get_value("enemy", "mh_hammer_head_size", mh_hammer_head_size)
+	if enemy_tuning_is_current:
+		mh_sprite_scale      = cfg.get_value("enemy", "mh_sprite_scale", mh_sprite_scale)
+		mh_sprite_offset_x   = cfg.get_value("enemy", "mh_sprite_offset_x", mh_sprite_offset_x)
+		mh_sprite_offset_y   = cfg.get_value("enemy", "mh_sprite_offset_y", mh_sprite_offset_y)
+		mh_col_offset_x      = cfg.get_value("enemy", "mh_col_offset_x", mh_col_offset_x)
+		mh_col_offset_y      = cfg.get_value("enemy", "mh_col_offset_y", mh_col_offset_y)
+		mh_col_width         = cfg.get_value("enemy", "mh_col_width", mh_col_width)
+		mh_col_height        = cfg.get_value("enemy", "mh_col_height", mh_col_height)
+		rg_sprite_scale      = cfg.get_value("enemy", "rg_sprite_scale", rg_sprite_scale)
+		rg_sprite_offset_y   = cfg.get_value("enemy", "rg_sprite_offset_y", rg_sprite_offset_y)
+		rg_col_offset_x      = cfg.get_value("enemy", "rg_col_offset_x", rg_col_offset_x)
+		rg_col_offset_y      = cfg.get_value("enemy", "rg_col_offset_y", rg_col_offset_y)
+		rg_col_width         = cfg.get_value("enemy", "rg_col_width", rg_col_width)
+		rg_col_height        = cfg.get_value("enemy", "rg_col_height", rg_col_height)
+		rd_sprite_scale      = cfg.get_value("enemy", "rd_sprite_scale", rd_sprite_scale)
+		rd_sprite_offset_y   = cfg.get_value("enemy", "rd_sprite_offset_y", rd_sprite_offset_y)
+		rd_col_offset_x      = cfg.get_value("enemy", "rd_col_offset_x", rd_col_offset_x)
+		rd_col_offset_y      = cfg.get_value("enemy", "rd_col_offset_y", rd_col_offset_y)
+		rd_col_width         = cfg.get_value("enemy", "rd_col_width", rd_col_width)
+		rd_col_height        = cfg.get_value("enemy", "rd_col_height", rd_col_height)
+		pz_sprite_scale      = cfg.get_value("enemy", "pz_sprite_scale", pz_sprite_scale)
+		pz_sprite_offset_y   = cfg.get_value("enemy", "pz_sprite_offset_y", pz_sprite_offset_y)
+		pz_col_offset_x      = cfg.get_value("enemy", "pz_col_offset_x", pz_col_offset_x)
+		pz_col_offset_y      = cfg.get_value("enemy", "pz_col_offset_y", pz_col_offset_y)
+		pz_col_width         = cfg.get_value("enemy", "pz_col_width", pz_col_width)
+		pz_col_height        = cfg.get_value("enemy", "pz_col_height", pz_col_height)
+		boss_sprite_scale    = cfg.get_value("enemy", "boss_sprite_scale", boss_sprite_scale)
+		boss_sprite_offset_x = cfg.get_value("enemy", "boss_sprite_offset_x", boss_sprite_offset_x)
+		boss_sprite_offset_y = cfg.get_value("enemy", "boss_sprite_offset_y", boss_sprite_offset_y)
+		boss_hurt_offset_x   = cfg.get_value("enemy", "boss_hurt_offset_x", boss_hurt_offset_x)
+		boss_hurt_offset_y   = cfg.get_value("enemy", "boss_hurt_offset_y", boss_hurt_offset_y)
+		boss_hurt_width      = cfg.get_value("enemy", "boss_hurt_width", boss_hurt_width)
+		boss_hurt_height     = cfg.get_value("enemy", "boss_hurt_height", boss_hurt_height)
+		boss_hurt_scale      = cfg.get_value("enemy", "boss_hurt_scale", boss_hurt_scale)
+		boss_skull_spawn_offset_x = cfg.get_value("enemy", "boss_skull_spawn_offset_x", boss_skull_spawn_offset_x)
+		boss_skull_spawn_offset_y = cfg.get_value("enemy", "boss_skull_spawn_offset_y", boss_skull_spawn_offset_y)
+		boss_skull_scale          = cfg.get_value("enemy", "boss_skull_scale", boss_skull_scale)
+		mh_hammer_scale     = cfg.get_value("enemy", "mh_hammer_scale", mh_hammer_scale)
+		mh_hammer_offset_x  = cfg.get_value("enemy", "mh_hammer_offset_x", mh_hammer_offset_x)
+		mh_hammer_offset_y  = cfg.get_value("enemy", "mh_hammer_offset_y", mh_hammer_offset_y)
+		mh_hammer_head_size = cfg.get_value("enemy", "mh_hammer_head_size", mh_hammer_head_size)
+	else:
+		# Keep unrelated personal settings, but rewrite stale enemy calibration
+		# so the Web build does not reapply old collision boxes on every launch.
+		save_config()
 
 func save_config() -> void:
 	var cfg := ConfigFile.new()
+	cfg.set_value("meta", "enemy_tuning_version", ENEMY_TUNING_VERSION)
 	cfg.set_value("char", "sprite_scale", sprite_scale)
 	cfg.set_value("char", "sprite_offset_x", sprite_offset_x)
 	cfg.set_value("char", "sprite_offset_y", sprite_offset_y)
