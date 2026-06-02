@@ -1,9 +1,9 @@
 [gd_scene load_steps=7 format=3 uid="uid://b1player0001"]
 
-[ext_resource type="Script" path="res://scripts/player.gd" id="1_player"]
+[ext_resource type="Script" uid="uid://3lbswma6ahir" path="res://scripts/player.gd" id="1_player"]
 [ext_resource type="Texture2D" path="res://assets/sprites/char_player_idle_01.png" id="2_idle"]
 [ext_resource type="Texture2D" path="res://assets/sprites/fx_suction.png" id="3_suction"]
-[ext_resource type="Script" path="res://scripts/vanish_marker.gd" id="4_vanish"]
+[ext_resource type="Script" uid="uid://bd720nr0lw6d6" path="res://scripts/vanish_marker.gd" id="4_vanish"]
 
 [sub_resource type="RectangleShape2D" id="PlayerBody"]
 size = Vector2(70, 140)

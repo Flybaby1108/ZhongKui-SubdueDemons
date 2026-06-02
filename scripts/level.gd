@@ -2,11 +2,11 @@ extends Node2D
 class_name Level
 
 const LevelData = preload("res://scripts/level_data.gd")
-const METEOR_HAMMER_SCENE = preload("res://scenes/enemy_meteor_hammer.tscn")
-const RED_GHOST_SCENE = preload("res://scenes/enemy_red_ghost.tscn")
-const RED_DEVIL_SCENE = preload("res://scenes/enemy_red_devil.tscn")
-const PALACE_ZOMBIE_SCENE = preload("res://scenes/enemy_palace_zombie.tscn")
-const BOSS_SCENE = preload("res://scenes/enemy_boss.tscn")
+var METEOR_HAMMER_SCENE: PackedScene
+var RED_GHOST_SCENE: PackedScene
+var RED_DEVIL_SCENE: PackedScene
+var PALACE_ZOMBIE_SCENE: PackedScene
+var BOSS_SCENE: PackedScene
 const PICKUP_SCENE = preload("res://scenes/pickup.tscn")
 const PLAYER_SCENE = preload("res://scenes/player.tscn")
 
@@ -31,6 +31,13 @@ var spawn_pos: Vector2 = Vector2(100, 500)
 @onready var ui: CanvasLayer = $UI
 
 func _ready() -> void:
+	# Lazy-load enemy scenes to avoid preload()-time script compilation race
+	# (enemy.gd references CharTuning autoload; preload may run before autoloads register)
+	METEOR_HAMMER_SCENE = load("res://scenes/enemy_meteor_hammer.tscn")
+	RED_GHOST_SCENE = load("res://scenes/enemy_red_ghost.tscn")
+	RED_DEVIL_SCENE = load("res://scenes/enemy_red_devil.tscn")
+	PALACE_ZOMBIE_SCENE = load("res://scenes/enemy_palace_zombie.tscn")
+	BOSS_SCENE = load("res://scenes/enemy_boss.tscn")
 	time_remaining = time_limit
 	GameState.current_stage = stage_number
 	GameState.stage_changed.emit(stage_number)

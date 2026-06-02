@@ -1,6 +1,6 @@
 [gd_scene load_steps=29 format=3 uid="uid://blevel001"]
 
-[ext_resource type="Script" path="res://scripts/level.gd" id="1_level"]
+[ext_resource type="Script" uid="uid://dsp88lchs72oy" path="res://scripts/level.gd" id="1_level"]
 [ext_resource type="TileSet" path="res://scenes/tileset.tres" id="2_tileset"]
 [ext_resource type="Texture2D" path="res://assets/sprites/Chapter1/Chapter1_BG_a.png" id="3_bg_a"]
 [ext_resource type="PackedScene" path="res://scenes/hud.tscn" id="4_hud"]

@@ -1,7 +1,7 @@
 [gd_scene load_steps=4 format=3 uid="uid://enemy_rd000001"]
 
-[ext_resource type="Script" path="res://scripts/enemy.gd" id="1_enemy"]
-[ext_resource type="Texture2D" path="res://assets/sprites/Enemy/RedDevil/RedDevil_idle/RedDevil_idle_01.png" id="2_tex"]
+[ext_resource type="Script" uid="uid://cl0ccenhkey6v" path="res://scripts/enemy.gd" id="1_enemy"]
+[ext_resource type="Texture2D" uid="uid://bmlgmwshhgt2u" path="res://assets/sprites/Enemy/RedDevil/RedDevil_idle/RedDevil_idle_01.png" id="2_tex"]
 
 [sub_resource type="RectangleShape2D" id="RDShape"]
 size = Vector2(60, 70)

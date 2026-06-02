@@ -1,6 +1,6 @@
 [gd_scene load_steps=2 format=3 uid="uid://baviv0001"]
 
-[ext_resource type="Script" path="res://scripts/end_screen.gd" id="1_end"]
+[ext_resource type="Script" uid="uid://d2bt4vklgd7ox" path="res://scripts/end_screen.gd" id="1_end"]
 
 [node name="Victory" type="Control"]
 anchors_preset = 15

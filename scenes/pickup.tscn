@@ -1,6 +1,6 @@
 [gd_scene load_steps=4 format=3 uid="uid://b6pickup0001"]
 
-[ext_resource type="Script" path="res://scripts/pickup.gd" id="1_pickup"]
+[ext_resource type="Script" uid="uid://d1rhsxeaua5yw" path="res://scripts/pickup.gd" id="1_pickup"]
 [ext_resource type="Texture2D" path="res://assets/sprites/prop_apple.png" id="2_tex"]
 
 [sub_resource type="RectangleShape2D" id="PickupShape"]

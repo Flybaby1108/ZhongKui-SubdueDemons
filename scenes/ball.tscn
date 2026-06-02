@@ -1,6 +1,6 @@
 [gd_scene load_steps=4 format=3 uid="uid://b5ball0001"]
 
-[ext_resource type="Script" path="res://scripts/ball.gd" id="1_ball"]
+[ext_resource type="Script" uid="uid://l0qa1aq068fg" path="res://scripts/ball.gd" id="1_ball"]
 [ext_resource type="Texture2D" path="res://assets/sprites/fx_ball.png" id="2_tex"]
 
 [sub_resource type="RectangleShape2D" id="BallShape"]

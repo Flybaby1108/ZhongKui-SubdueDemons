@@ -93,12 +93,9 @@ const COOLDOWN_MIN := 7.5
 const COOLDOWN_MAX := 12.5
 
 # 可被召唤的敌人 PackedScene 列表（每次随机挑一种，召唤出 4 个相同种类）
-const SUMMON_SCENES: Array[PackedScene] = [
-	preload("res://scenes/enemy_meteor_hammer.tscn"),
-	preload("res://scenes/enemy_red_ghost.tscn"),
-	preload("res://scenes/enemy_red_devil.tscn"),
-	preload("res://scenes/enemy_palace_zombie.tscn"),
-]
+# NOTE: lazy-loaded in _ready() to avoid preload()-time script compilation race
+# (enemy.gd references CharTuning autoload; preload may run before autoloads register)
+var SUMMON_SCENES: Array[PackedScene] = []
 
 # Attack2 释放的 FireSkull 投射物
 const FIRE_SKULL_SCENE: PackedScene = preload("res://scenes/fire_skull.tscn")
@@ -150,6 +147,14 @@ var _next_attack: int = 0
 func _ready() -> void:
 	add_to_group("boss")
 	print("[BOSS DEBUG] _ready: layer=", collision_layer, " mask=", collision_mask, " global_position=", global_position)
+
+	# Lazy-load enemy scenes for summoning (avoids preload race with CharTuning autoload)
+	SUMMON_SCENES = [
+		load("res://scenes/enemy_meteor_hammer.tscn"),
+		load("res://scenes/enemy_red_ghost.tscn"),
+		load("res://scenes/enemy_red_devil.tscn"),
+		load("res://scenes/enemy_palace_zombie.tscn"),
+	]
 
 	# 加载 idle 帧
 	for path in IDLE_FRAMES:

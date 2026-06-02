@@ -1,6 +1,6 @@
 [gd_scene load_steps=4 format=3 uid="uid://fireskull0001"]
 
-[ext_resource type="Script" path="res://scripts/fire_skull.gd" id="1_fs_script"]
+[ext_resource type="Script" uid="uid://bdk2pnqb12xss" path="res://scripts/fire_skull.gd" id="1_fs_script"]
 [ext_resource type="Texture2D" path="res://assets/sprites/Enemy/Boss/FireSkull/FireSkull_01.png" id="2_fs_tex"]
 
 [sub_resource type="RectangleShape2D" id="FireSkullShape"]

@@ -1,6 +1,6 @@
 [gd_scene load_steps=3 format=3 uid="uid://cg_intro_001"]
 
-[ext_resource type="Script" path="res://scripts/cg_intro.gd" id="1_cg"]
+[ext_resource type="Script" uid="uid://b5y767yrqlatk" path="res://scripts/cg_intro.gd" id="1_cg"]
 [ext_resource type="AudioStreamMP3" path="res://assets/sprites/Start/CGv1/CGv1.mp3" id="2_music"]
 
 [node name="CgIntro" type="Control"]
