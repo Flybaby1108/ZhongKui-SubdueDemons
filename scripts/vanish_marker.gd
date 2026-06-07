@@ -5,6 +5,10 @@ extends Node2D
 
 func _ready() -> void:
 	z_index = 100  # 双保险：高 z_index 确保渲染在所有子节点之上
+	process_mode = Node.PROCESS_MODE_ALWAYS
+	CharTuning.tuning_changed.connect(queue_redraw)
+	add_to_group("vanish_marker")
+	queue_redraw()
 
 func _process(_delta: float) -> void:
 	# 跟随父节点朝向 + 调参变化，每帧重绘

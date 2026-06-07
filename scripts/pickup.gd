@@ -8,6 +8,7 @@ enum Type { APPLE, CHERRY, STAR, HEART, COIN }
 # COIN 在一局游戏中永久存在（直到被玩家拾取或场景切换销毁），不再设 lifetime / fade
 # COIN 序列帧动画速度（秒/帧）
 const COIN_ANIM_SPEED := 0.1
+const COIN_PICKUP_SFX_PATH := "res://assets/audio/Zhongkui_Inhale_CoinFalls.mp3"
 
 # STAR (元宝) 间歇式动画：每 2 秒触发一次 4 帧序列，播完回到第 1 帧停留
 const STAR_IDLE_INTERVAL := 2.0   # 两次播放之间的间隔（秒）
@@ -179,4 +180,52 @@ func _on_body_entered(body: Node) -> void:
 			GameState.gain_life()
 		else:
 			GameState.add_score(VALUES[pickup_type])
+			if pickup_type == Type.COIN:
+				_play_coin_fly_to_hud()
+				GameState.add_coin()
+				_play_coin_pickup_sfx()
 		queue_free()
+
+func _play_coin_fly_to_hud() -> void:
+	var hud := _get_hud()
+	if hud == null or not hud.has_method("play_coin_pickup_fly"):
+		return
+	hud.play_coin_pickup_fly(global_position, sprite.texture, _get_sprite_screen_size())
+
+func _get_hud() -> Node:
+	var current := get_tree().current_scene
+	if current == null:
+		return null
+	var hud := current.get_node_or_null("UI")
+	if hud != null:
+		return hud
+	return current.find_child("HUD", true, false)
+
+func _get_sprite_screen_size() -> Vector2:
+	if sprite.texture == null:
+		return Vector2.ZERO
+	var visual_size := sprite.texture.get_size() * sprite.global_scale.abs()
+	var canvas_transform := get_viewport().get_canvas_transform()
+	var origin := canvas_transform * global_position
+	var right := canvas_transform * (global_position + Vector2(visual_size.x, 0.0))
+	var down := canvas_transform * (global_position + Vector2(0.0, visual_size.y))
+	return Vector2(origin.distance_to(right), origin.distance_to(down))
+
+func _play_coin_pickup_sfx() -> void:
+	var stream := load(COIN_PICKUP_SFX_PATH)
+	if stream == null:
+		return
+	stream = stream.duplicate()
+	if stream is AudioStreamMP3:
+		stream.loop = false
+	var sfx_parent := get_parent()
+	if sfx_parent == null:
+		sfx_parent = get_tree().current_scene
+	if sfx_parent == null:
+		return
+	var sfx := AudioStreamPlayer.new()
+	sfx.name = "CoinPickupSfx"
+	sfx.stream = stream
+	sfx_parent.add_child(sfx)
+	sfx.finished.connect(sfx.queue_free)
+	sfx.play()

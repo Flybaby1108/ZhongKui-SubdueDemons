@@ -9,6 +9,12 @@ var PALACE_ZOMBIE_SCENE: PackedScene
 var BOSS_SCENE: PackedScene
 const PICKUP_SCENE = preload("res://scenes/pickup.tscn")
 const PLAYER_SCENE = preload("res://scenes/player.tscn")
+const FLOATING_PLATFORM_SCRIPT = preload("res://scripts/floating_platform.gd")
+const STAGE_BGM_PATHS := {
+	1: "res://assets/audio/Chapter1_BGM.mp3",
+	2: "res://assets/audio/Chapter2_BGM.mp3",
+	3: "res://assets/audio/ChapterBoss_BGM.mp3",
+}
 
 @export var stage_number: int = 1
 @export var time_limit: float = 90.0
@@ -22,6 +28,7 @@ var enemies_remaining: int = 0
 var level_complete: bool = false
 var ready_done: bool = false
 var spawn_pos: Vector2 = Vector2(100, 500)
+var bgm_player: AudioStreamPlayer = null
 
 @onready var tile_map: TileMapLayer = $TileMap
 @onready var nogo_map: TileMapLayer = $NoGoMap
@@ -29,6 +36,7 @@ var spawn_pos: Vector2 = Vector2(100, 500)
 @onready var pickup_container: Node2D = $Pickups
 @onready var player_container: Node2D = $PlayerHolder
 @onready var ui: CanvasLayer = $UI
+@onready var platform_container: Node2D = $FloatingPlatforms
 
 func _ready() -> void:
 	# Lazy-load enemy scenes to avoid preload()-time script compilation race
@@ -44,6 +52,25 @@ func _ready() -> void:
 	_build_level()
 	tile_map.visible = false
 	ready_done = true
+	await RenderingServer.frame_post_draw
+	if is_inside_tree():
+		_play_stage_bgm()
+
+func _play_stage_bgm() -> void:
+	if not STAGE_BGM_PATHS.has(stage_number):
+		return
+	var bgm_path: String = STAGE_BGM_PATHS[stage_number]
+	var stream := load(bgm_path) as AudioStream
+	if stream == null:
+		push_warning("Stage %d BGM not found: %s" % [stage_number, bgm_path])
+		return
+	if stream is AudioStreamMP3:
+		(stream as AudioStreamMP3).loop = true
+	bgm_player = AudioStreamPlayer.new()
+	bgm_player.name = "Stage%dBGM" % stage_number
+	bgm_player.stream = stream
+	add_child(bgm_player)
+	bgm_player.play()
 
 const TILE_PX := 10
 
@@ -81,6 +108,7 @@ func _build_level() -> void:
 				# Spawn at top of blob so enemies don't clip into ground below
 				var spawn_y = float(min_y)
 				_spawn_entity(ch, Vector2(center_x * TILE_PX + TILE_PX / 2.0, spawn_y * TILE_PX + TILE_PX / 2.0))
+	_spawn_floating_platforms()
 
 func _flood_fill(grid: Array, start_x: int, start_y: int, ch: String, processed: Dictionary) -> Array:
 	var result = []
@@ -144,6 +172,14 @@ func _spawn_enemy(scene: PackedScene, pos: Vector2) -> void:
 	enemy_container.add_child(e)
 	enemies_remaining += 1
 	e.tree_exited.connect(_on_enemy_removed)
+
+func _spawn_floating_platforms() -> void:
+	if platform_container == null:
+		return
+	for data in LevelData.FLOATING_PLATFORMS.get(stage_number, []):
+		var platform := FLOATING_PLATFORM_SCRIPT.new()
+		platform.configure(data)
+		platform_container.add_child(platform)
 
 # Boss 技能召唤敌人时调用：实例化敌人但**不**计入 enemies_remaining。
 # 召唤的杂兵不应阻塞通关条件（否则玩家清完 BBBBBB 仍卡死），

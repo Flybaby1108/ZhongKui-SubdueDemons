@@ -637,7 +637,7 @@ var is_frozen: bool = false
 var is_being_shrunk: bool = false
 var _was_being_shrunk: bool = false
 var _was_frozen: bool = false
-# 持续被钟馗"真正吸引"的累计时间（秒）；中断（脱离吸气区/玩家松开）→ 归零
+# 被钟馗"真正吸引"的累计时间（秒）；中断（脱离吸气区/玩家松开）也保留进度
 # 累计 ≥ SUCTION_CAPTURE_TIME 时算捕获成功，进入 in-flight 飞向葫芦阶段
 var suction_hold_timer: float = 0.0
 const SUCTION_CAPTURE_TIME := 1.0  # 默认/兜底值
@@ -667,6 +667,10 @@ var _has_suction_start: bool = false
 # 由 player 每帧传入的"消失点世界坐标"，用于运动学插值
 var _suction_vanish_world: Vector2 = Vector2.ZERO
 var _has_suction_vanish: bool = false
+var _has_suction_visual_origin: bool = false
+
+const SUCTION_FLIGHT_STRETCH_MAX := 0.70
+const SUCTION_FLIGHT_SQUASH_MAX := 0.30
 
 func _physics_process(delta: float) -> void:
 	if dying or is_captured:
@@ -686,13 +690,12 @@ func _physics_process(delta: float) -> void:
 	# 必须在 is_being_shrunk = false 之前，否则状态判断会失准
 	_tick_capture_custom_anim(delta)
 	is_being_shrunk = false
-	# 维护"持续被吸"计时：吸气全程通过 is_frozen 标记，敌人**完全冻结在原地**。
-	# 1 秒计满 → player 调 begin_capture_flight()，敌人进入 in-flight 阶段自我推进。
+	# 维护"累计被吸"计时：吸气全程通过 is_frozen 标记，敌人**完全冻结在原地**。
+	# 累计计满 → player 调 begin_capture_flight()，敌人进入 in-flight 阶段自我推进。
 	# 设计：is_being_sucked 已废弃（保留字段以兼容 ball.gd 等可能的引用，但不再用作位置驱动）。
 	if is_frozen:
 		suction_hold_timer += delta
 	else:
-		suction_hold_timer = 0.0
 		_has_suction_start = false
 		_has_suction_vanish = false
 	if global_position.y > 1100.0:
@@ -705,13 +708,7 @@ func _physics_process(delta: float) -> void:
 		flight_t = min(FLIGHT_DURATION, flight_t + delta)
 		var progress: float = flight_t / FLIGHT_DURATION
 		global_position = flight_start_pos.lerp(flight_vanish_world, progress)
-		# 缩放 + sprite.position 收敛到 vanish（与原 shrink 公式一致）
-		var factor: float = 1.0 - progress
-		var base: float = _get_base_sprite_scale()
-		var mul: float = _get_capture_scale_mul()
-		sprite.scale = Vector2(base * mul * factor, base * mul * factor)
-		var vanish_local: Vector2 = flight_vanish_world - global_position
-		sprite.position = _orig_sprite_position.lerp(vanish_local, progress)
+		_apply_suction_flight_stretch(progress)
 		velocity = Vector2.ZERO
 		if flight_t >= FLIGHT_DURATION:
 			is_in_flight = false
@@ -1345,7 +1342,7 @@ func _end_hop() -> void:
 
 # ───────── 以上：跨平台跳跃 ─────────
 
-func freeze_for_suction() -> void:
+func freeze_for_suction(_vanish_world: Vector2 = Vector2.INF) -> void:
 	if is_captured or dying:
 		return
 	# 被吸住的流星锤攻击元素可反打 Boss：吸到锤子时按一次命中处理。
@@ -1365,6 +1362,8 @@ func freeze_for_suction() -> void:
 	# 进入蓄力（冻结）状态时，立刻切换为 capture 纹理（与正式吸引共用同一外观）
 	if not is_frozen and not is_being_shrunk:
 		_apply_capture_texture()
+		_orig_sprite_position = sprite.position
+		_has_suction_visual_origin = true
 	is_frozen = true
 
 # 被吸过程中按 progress (0~1) 缩小 sprite；1.0 = 完全消失
@@ -1401,6 +1400,7 @@ func reset_suction_shrink() -> void:
 	sprite.visible = true
 	is_being_shrunk = false
 	_was_being_shrunk = false
+	_has_suction_visual_origin = false
 	var base: float = _get_base_sprite_scale()
 	sprite.scale = Vector2(base, base)
 	# 复位 sprite.position（被吸过程可能朝消失点偏移了）
@@ -1463,6 +1463,18 @@ func _apply_capture_texture() -> void:
 		var mul: float = _get_capture_scale_mul()
 		sprite.scale = Vector2(base * mul, base * mul)
 
+func _apply_suction_flight_stretch(progress: float) -> void:
+	var clamped: float = clamp(progress, 0.0, 1.0)
+	var factor: float = 1.0 - clamped
+	var peak: float = sin(clamped * PI)
+	var base: float = _get_base_sprite_scale()
+	var mul: float = _get_capture_scale_mul()
+	var stretch: float = 1.0 + SUCTION_FLIGHT_STRETCH_MAX * peak
+	var squash: float = 1.0 - SUCTION_FLIGHT_SQUASH_MAX * peak
+	sprite.scale = Vector2(base * mul * factor * stretch, base * mul * factor * squash)
+	var vanish_local: Vector2 = flight_vanish_world - global_position
+	sprite.position = _orig_sprite_position.lerp(vanish_local, clamped)
+
 # 当前 capture 状态对应的 sprite 缩放补偿；非 capture 状态返回 1.0
 func _get_capture_scale_mul() -> float:
 	if _capture_key == "":
@@ -1521,7 +1533,7 @@ func apply_suction(dir: Vector2, force: float) -> void:
 		_suction_start_pos = global_position
 		_has_suction_start = true
 
-# 钟馗持续吸 1 秒 → 调此进入"飞向葫芦"阶段。从此 enemy 自我推进飞行动画，
+# 钟馗累计吸满阈值 → 调此进入"飞向葫芦"阶段。从此 enemy 自我推进飞行动画，
 # 与玩家是否继续按吸键无关；动画完成后自动变成 is_captured + hide()。
 func begin_capture_flight(vanish_world: Vector2) -> void:
 	if is_captured or dying or is_in_flight:
@@ -1537,9 +1549,8 @@ func begin_capture_flight(vanish_world: Vector2) -> void:
 	is_being_sucked = false
 	is_frozen = false
 	is_being_shrunk = true   # 维持 capture 纹理和缩放公式
-	# 保存"原始 sprite.position"以便 shrink 公式正确 lerp
-	# 每次起飞都重新记录（覆盖旧值），因为现在 1 秒冻结期间不再调 apply_suction_shrink
 	_orig_sprite_position = sprite.position
+	_has_suction_visual_origin = true
 
 func become_captured() -> void:
 	is_captured = true

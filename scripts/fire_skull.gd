@@ -62,6 +62,8 @@ var is_in_flight: bool = false
 var is_being_sucked: bool = false
 var suction_hold_timer: float = 0.0
 const SUCTION_CAPTURE_TIME := 0.0  # 瞬间吸入：一接触吸入区域立刻进入飞向葫芦阶段
+const SUCTION_FLIGHT_STRETCH_MAX := 0.65
+const SUCTION_FLIGHT_SQUASH_MAX := 0.28
 
 # 内部状态：被吸入葫芦的飞行阶段
 var _is_frozen: bool = false       # 蓄力期：完全冻结在原地
@@ -134,26 +136,28 @@ func _physics_process(delta: float) -> void:
 		var p: float = _flight_t / _FLIGHT_DURATION
 		global_position = _flight_start.lerp(_flight_vanish, p)
 		# 缩放公式以"开始飞行那一刻 CharTuning 的 scale"为基准 × (1-p)，
-		# 与玩家 vanish 飞行收缩动画语义一致；飞行中策划在 F1 改 scale 不影响这一帧动画。
+		# 中段额外拉伸，形成被葫芦口扯长后收进去的效果。
+		var peak: float = sin(p * PI)
 		var s: float = _flight_base_scale * (1.0 - p)
-		sprite.scale = Vector2(s, s)
+		sprite.scale = Vector2(
+			s * (1.0 + SUCTION_FLIGHT_STRETCH_MAX * peak),
+			s * (1.0 - SUCTION_FLIGHT_SQUASH_MAX * peak)
+		)
 		if _flight_t >= _FLIGHT_DURATION:
 			is_in_flight = false
 			become_captured()
 		return
 
-	# 3) 蓄力期：被钟馗"持续吸住"中，完全冻结在原地，
+	# 3) 蓄力期：被钟馗吸住时完全冻结在原地，
 	#    suction_hold_timer 由 player.gd 在每帧 freeze_for_suction 后由 enemy 自身累加，
 	#    我们这里同样累加（player 不直接读 _is_frozen，而是在 _is_frozen=true 时累计）。
 	#    与 Enemy 的实现一致：每物理帧末把 _is_frozen 重置为 false，
-	#    下一帧若还在吸气区会被 player 重新置 true；脱离则归零计时。
+	#    下一帧若还在吸气区会被 player 重新置 true；脱离也保留累计进度。
 	if _is_frozen:
 		suction_hold_timer += delta
 		velocity = Vector2.ZERO
 		_is_frozen = false
 		return
-	else:
-		suction_hold_timer = 0.0
 
 	# 4) 正常飞行：弱追踪玩家
 	if _player_ref != null and is_instance_valid(_player_ref):
@@ -196,12 +200,12 @@ func get_suction_capture_time() -> float:
 # 钟馗的 SuctionArea 每帧对落入其中的"敌人"调用。
 # 进入冻结状态后，suction_hold_timer 在 _physics_process 中累加；
 # 计满 → player.gd 调 begin_capture_flight 进入飞向葫芦阶段。
-func freeze_for_suction() -> void:
+func freeze_for_suction(_vanish_world: Vector2 = Vector2.INF) -> void:
 	if is_captured or is_in_flight:
 		return
 	_is_frozen = true
 
-# 持续被吸 1s 后由 player.gd 调用：进入飞向葫芦的运动学阶段。
+# 累计被吸满阈值后由 player.gd 调用：进入飞向葫芦的运动学阶段。
 func begin_capture_flight(vanish_world: Vector2) -> void:
 	if is_captured or is_in_flight:
 		return

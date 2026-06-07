@@ -17,6 +17,7 @@ const LAUNCHED_TEX := {
 	3: "res://assets/sprites/Enemy/PalaceZombie/PalaceZombie_launched/PalaceZombie_launched.png",
 }
 
+const COLLISION_SFX_PATH := "res://assets/audio/Zhongkui_Inhale_Collision.mp3"
 const PICKUP_SCENE = preload("res://scenes/pickup.tscn")
 
 # FireSkull 喷出后的帧动画序列（FireSkull 在 ball 形态下继续循环播放原序列帧）。
@@ -46,15 +47,42 @@ var _fs_frames: Array = []
 var _fs_idx: int = 0
 var _fs_t: float = 0.0
 var _is_fire_skull: bool = false
+var collision_sfx: AudioStreamPlayer = null
 
 @onready var sprite: Sprite2D = $Sprite
 @onready var hit_area: Area2D = $HitArea
 
 func _ready() -> void:
 	hit_area.body_entered.connect(_on_hit_body)
+	_setup_collision_sfx()
 	# 监听调参变化，实时同步 sprite scale
 	CharTuning.tuning_changed.connect(_apply_tuning)
 	print("[BALL DEBUG] _ready: hit_area.collision_mask=", hit_area.collision_mask, " hit_area.monitoring=", hit_area.monitoring, " hit_area shape valid=", hit_area.get_node("HitShape").shape != null)
+
+func _setup_collision_sfx() -> void:
+	collision_sfx = AudioStreamPlayer.new()
+	collision_sfx.name = "CollisionSfx"
+	collision_sfx.max_polyphony = 8
+	var stream := load(COLLISION_SFX_PATH)
+	if stream != null:
+		stream = stream.duplicate()
+		if stream is AudioStreamMP3:
+			stream.loop = false
+		collision_sfx.stream = stream
+	add_child(collision_sfx)
+
+func _play_enemy_hit_sfx() -> void:
+	if collision_sfx == null or collision_sfx.stream == null:
+		return
+	var sfx_parent := get_parent()
+	if sfx_parent == null:
+		sfx_parent = self
+	var hit_sfx := AudioStreamPlayer.new()
+	hit_sfx.name = "EnemyHitSfx"
+	hit_sfx.stream = collision_sfx.stream
+	sfx_parent.add_child(hit_sfx)
+	hit_sfx.finished.connect(hit_sfx.queue_free)
+	hit_sfx.play()
 
 func _apply_tuning() -> void:
 	# FireSkull 形态：用 boss_skull_scale，不受 ball_sprite_scale 控制
@@ -131,6 +159,7 @@ func _on_hit_body(body: Node) -> void:
 		already_hit.append(body)
 		# 每个被滚动 ball 撞死的敌人只爆 1 枚铜钱
 		_drop_coin(body.global_position)
+		_play_enemy_hit_sfx()
 		body.die()
 
 func _drop_coin(at: Vector2) -> void:

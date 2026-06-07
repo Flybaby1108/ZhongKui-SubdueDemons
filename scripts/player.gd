@@ -11,6 +11,11 @@ const HURT_INVINCIBLE_TIME := 1.5
 const HOLD_TIME_LIMIT := 5.0
 const MAX_CAPTURED := 3
 const VACUUM_CHARGE_TIME := 1.0
+const INHALE_SFX_PATH := "res://assets/audio/Zhongkui_Inhale.mp3"
+const INHALE_ENTER_SFX_PATH := "res://assets/audio/Zhongkui_Inhale_Enter.mp3"
+const INHALE_OUT_SFX_PATH := "res://assets/audio/Zhongkui_Inhale_Out.mp3"
+const INHALE_SFX_FADE_IN_TIME := 0.2
+const INHALE_SFX_SILENT_DB := -80.0
 
 const WORLD_LEFT := 0.0
 const WORLD_RIGHT := 1920.0
@@ -33,6 +38,10 @@ const BODY_FOOT := 75.0
 # "吸"动作的高亮微粒特效（蓄力+正式吸气期间发射，朝葫芦口飞）
 var inhale_particles: GPUParticles2D = null
 var _inhale_particle_material: ParticleProcessMaterial = null
+var inhale_sfx: AudioStreamPlayer = null
+var inhale_enter_sfx: AudioStreamPlayer = null
+var inhale_out_sfx: AudioStreamPlayer = null
+var inhale_sfx_fade_timer: float = 0.0
 
 var facing_right: bool = true
 var is_vacuuming: bool = false
@@ -46,6 +55,7 @@ var vacuum_armed: bool = false
 var last_damage_frame: int = -1000
 var invincible: bool = false
 var invincible_timer: float = 0.0
+var is_switching_platform: bool = false
 var anim_state: String = "idle"
 var anim_frame: int = 0
 var suction_anim_frame: int = 0
@@ -122,9 +132,75 @@ func _ready() -> void:
 	hurt_box.area_entered.connect(_on_hurt_box_area_entered)
 	suction_visual.visible = false
 	suction_visual.modulate = Color(1, 1, 1, 1)
+	_setup_inhale_sfx()
+	_setup_inhale_enter_sfx()
+	_setup_inhale_out_sfx()
 	_setup_inhale_particles()
 	CharTuning.tuning_changed.connect(_apply_tuning)
 	_apply_tuning()
+
+func _setup_inhale_sfx() -> void:
+	inhale_sfx = AudioStreamPlayer.new()
+	inhale_sfx.name = "InhaleSfx"
+	var stream := load(INHALE_SFX_PATH)
+	if stream != null:
+		stream = stream.duplicate()
+		if stream is AudioStreamMP3:
+			stream.loop = true
+		inhale_sfx.stream = stream
+	inhale_sfx.volume_db = INHALE_SFX_SILENT_DB
+	add_child(inhale_sfx)
+
+func _setup_inhale_enter_sfx() -> void:
+	inhale_enter_sfx = AudioStreamPlayer.new()
+	inhale_enter_sfx.name = "InhaleEnterSfx"
+	inhale_enter_sfx.max_polyphony = MAX_CAPTURED
+	var stream := load(INHALE_ENTER_SFX_PATH)
+	if stream != null:
+		stream = stream.duplicate()
+		if stream is AudioStreamMP3:
+			stream.loop = false
+		inhale_enter_sfx.stream = stream
+	add_child(inhale_enter_sfx)
+
+func _play_inhale_enter_sfx() -> void:
+	if inhale_enter_sfx == null or inhale_enter_sfx.stream == null:
+		return
+	inhale_enter_sfx.play()
+
+func _setup_inhale_out_sfx() -> void:
+	inhale_out_sfx = AudioStreamPlayer.new()
+	inhale_out_sfx.name = "InhaleOutSfx"
+	inhale_out_sfx.max_polyphony = MAX_CAPTURED
+	var stream := load(INHALE_OUT_SFX_PATH)
+	if stream != null:
+		stream = stream.duplicate()
+		if stream is AudioStreamMP3:
+			stream.loop = false
+		inhale_out_sfx.stream = stream
+	add_child(inhale_out_sfx)
+
+func _play_inhale_out_sfx() -> void:
+	if inhale_out_sfx == null or inhale_out_sfx.stream == null:
+		return
+	inhale_out_sfx.play()
+
+func _set_inhale_sfx_active(active: bool, delta: float) -> void:
+	if inhale_sfx == null or inhale_sfx.stream == null:
+		return
+	if active:
+		if not inhale_sfx.playing:
+			inhale_sfx.volume_db = INHALE_SFX_SILENT_DB
+			inhale_sfx_fade_timer = 0.0
+			inhale_sfx.play()
+		if inhale_sfx.volume_db < 0.0:
+			inhale_sfx_fade_timer = minf(inhale_sfx_fade_timer + delta, INHALE_SFX_FADE_IN_TIME)
+			var fade_t := inhale_sfx_fade_timer / INHALE_SFX_FADE_IN_TIME
+			inhale_sfx.volume_db = lerpf(INHALE_SFX_SILENT_DB, 0.0, fade_t)
+	elif inhale_sfx.playing:
+		inhale_sfx.stop()
+		inhale_sfx.volume_db = INHALE_SFX_SILENT_DB
+		inhale_sfx_fade_timer = 0.0
 
 # 创建高亮微粒系统：从吸气区域**远端宽带**发射，沿途**向中线汇聚**朝葫芦口飞
 # 形成"远端宽 → 葫芦口窄"的锥形会聚效果
@@ -279,6 +355,7 @@ func _physics_process(delta: float) -> void:
 
 	if Input.is_action_just_pressed("jump") and is_on_floor():
 		velocity.y = JUMP_VELOCITY
+		is_switching_platform = true
 
 	if Input.is_action_just_pressed("move_down") and is_on_floor():
 		_try_drop_through_platform()
@@ -309,6 +386,9 @@ func _physics_process(delta: float) -> void:
 
 
 	move_and_slide()
+	if is_switching_platform and is_on_floor():
+		is_switching_platform = false
+		_damage_from_overlapping_enemy()
 	_clamp_to_world()
 	_update_facing()
 	_apply_suction(delta)
@@ -340,6 +420,7 @@ func _apply_suction(delta: float) -> void:
 	# 蓄力期间或正式吸气期间都要播放视觉特效
 	var fx_active := is_charging_vacuum or is_vacuuming
 	suction_visual.visible = fx_active
+	_set_inhale_sfx_active(fx_active, delta)
 	# 高亮微粒：仅在"吸"状态发射，朝葫芦口飞
 	if inhale_particles != null:
 		inhale_particles.emitting = fx_active
@@ -355,7 +436,7 @@ func _apply_suction(delta: float) -> void:
 			suction_anim_frame = (suction_anim_frame + 1) % _suction_textures.size()
 		suction_visual.texture = _suction_textures[suction_anim_frame]
 	# 吸气全程（蓄力期 + 完成期）：被吸到的敌人**完全冻结**在原地，绝不漂移。
-	# 1 秒计满 → 立刻进入 in-flight 阶段（0.4s 自我推进飞向葫芦，与玩家是否仍按键解耦）。
+	# 累计计满 → 立刻进入 in-flight 阶段（0.4s 自我推进飞向葫芦，与玩家是否仍按键解耦）。
 	# 设计要点：
 	# - 整个 1 秒期间不调用任何会改变敌人 global_position 的逻辑
 	# - 避免之前"kinematic lerp 朝消失点"路径——会让敌人穿过 one-way 平台
@@ -374,7 +455,7 @@ func _apply_suction(delta: float) -> void:
 		if not (body is Enemy or body is FireSkull) or body.is_captured or body.is_in_flight:
 			continue
 		# 冻结敌人在原地（蓄力 + 完成期都用同一套冻结逻辑）
-		body.freeze_for_suction()
+		body.freeze_for_suction(vanish_point)
 		# 计满 → 立刻起飞向葫芦（独立于玩家吸键状态）
 		# 阈值按敌人类型区分：MeteorHammer=2s, RedDevil=3s, RedGhost/PalaceZombie=1s
 		# 注意：begin_capture_flight 会重置 is_frozen / is_being_sucked，并接管 sprite 缩放公式
@@ -393,6 +474,7 @@ func _tick_in_flight_enemies() -> void:
 			continue
 		if enemy.is_captured:
 			# 飞行动画完成（enemy._physics_process 内自动 become_captured()）
+			_play_inhale_enter_sfx()
 			captured_enemies.append(enemy)
 		else:
 			still_flying.append(enemy)
@@ -421,6 +503,7 @@ func _shoot_balls() -> void:
 		get_parent().add_child(ball)
 		ball.global_position = global_position + Vector2(dir_x * (100 + i * 30), -i * 4)
 		ball.launch(Vector2(dir_x, 0) * BALL_SPEED, enemy.enemy_type, capture_count)
+		_play_inhale_out_sfx()
 		enemy.queue_free()
 	captured_enemies.clear()
 	hold_timer = 0.0
@@ -534,6 +617,8 @@ func _on_hurt_box_body_entered(body: Node) -> void:
 	if current_frame - last_damage_frame < 90:
 		return
 	if body is Enemy and not body.is_captured:
+		if is_switching_platform:
+			return
 		last_damage_frame = current_frame
 		invincible = true
 		invincible_timer = HURT_INVINCIBLE_TIME
@@ -547,6 +632,18 @@ func _on_hurt_box_body_entered(body: Node) -> void:
 		invincible_timer = HURT_INVINCIBLE_TIME
 		take_damage()
 		body.queue_free()
+
+func _damage_from_overlapping_enemy() -> void:
+	var current_frame := Engine.get_physics_frames()
+	if current_frame - last_damage_frame < 90:
+		return
+	for body in hurt_box.get_overlapping_bodies():
+		if body is Enemy and not body.is_captured:
+			last_damage_frame = current_frame
+			invincible = true
+			invincible_timer = HURT_INVINCIBLE_TIME
+			take_damage()
+			return
 
 func _on_hurt_box_area_entered(_area: Area2D) -> void:
 	pass
@@ -592,4 +689,5 @@ func _try_drop_through_platform() -> void:
 			if data and data.get_collision_polygons_count(0) > 0 and data.is_collision_polygon_one_way(0, 0):
 				position.y += 10.0
 				velocity.y = 400.0
+				is_switching_platform = true
 				return

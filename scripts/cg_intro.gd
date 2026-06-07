@@ -8,6 +8,7 @@ extends Control
 #   [帧 273 ~ 278] CgLayer alpha 线性从 1.0 → 0.0（6 帧衰减）
 #   [帧 278 播完]  alpha = 0.0，BgLayer 已完整露出，自动切换 main.tscn
 #
+# 音频：CGv1.mp3 播完后接 StartMusic.mp3，直到玩家按回车进入游戏时停止。
 # 跳过：任意时刻按 ui_accept（回车/空格）立即停止 CGv1.mp3 并切换 main.tscn
 # ═══════════════════════════════════════════════════════════════════════════
 
@@ -46,6 +47,8 @@ var _bg_anim_t:    float = 0.0
 var _skip_blink_t: float = 0.0
 
 func _ready() -> void:
+	GameState.prepare_start_sequence_music()
+
 	# 立即开始后台预加载 main.tscn（CG 播放 ~11s 内足以加载完毕）
 	ResourceLoader.load_threaded_request(MAIN_MENU_PATH)
 
@@ -79,6 +82,7 @@ func _ready() -> void:
 
 	# 播放配乐
 	if music.stream != null:
+		GameState.register_intro_music_player(music)
 		music.play()
 
 	# CgLayer 初始完全不透明（从第 1 帧开始全覆盖 BgLayer）
@@ -143,23 +147,19 @@ func _finish(skipped: bool = false) -> void:
 
 	if skipped:
 		# 跳过：立即停止 CGv1.mp3，音乐随场景释放即可
-		if music != null:
-			if music.playing:
-				music.stop()
-			# 不 reparent，cg_intro 释放时 music 节点一并被回收
+		GameState.stop_start_sequence_music()
+		if is_instance_valid(music) and music.playing:
+			music.stop()
 	else:
 		# 正常播完：把 Music 节点 reparent 到 SceneTree.root，使其脱离当前场景，
-		# 不会随 cg_intro 一起被释放。播放结束后自动 queue_free。
-		if music != null and music.playing:
+		# 不会随 cg_intro 一起被释放。CGv1.mp3 结束后由 GameState 接续 StartMusic.mp3。
+		if is_instance_valid(music) and music.playing:
 			var root := get_tree().root
 			music.get_parent().remove_child(music)
 			root.add_child(music)
 			music.process_mode = Node.PROCESS_MODE_ALWAYS
-			# 一次性连接：mp3 播完自动清理
-			if not music.finished.is_connected(music.queue_free):
-				music.finished.connect(music.queue_free)
-		elif music != null:
-			# 如果没在播放（极端情况），直接释放
+		elif is_instance_valid(music):
+			# 如果没在播放（极端情况），直接释放；StartMusic 已由 GameState 接续。
 			music.queue_free()
 
 	# 用后台已预加载的 PackedScene 切换（无磁盘读取，零卡顿）

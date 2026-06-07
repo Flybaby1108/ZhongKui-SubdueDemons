@@ -82,6 +82,13 @@ var ball_sprite_scale: float = 0.45
 var title_pos_x: float = 340.0
 var title_pos_y: float = 502.0
 var title_scale: float = 1.14
+# 关卡 HUD 铜钱统计：Coin.png 图标与像素数字在 CoinCounter 容器内的位置和缩放
+var coin_icon_pos_x: float = 0.0
+var coin_icon_pos_y: float = 2.0
+var coin_icon_scale: float = 0.45
+var coin_digits_pos_x: float = 72.0
+var coin_digits_pos_y: float = 6.0
+var coin_digits_scale: float = 1.0
 # 钟馗"吸入消失点"相对钟馗中心的偏移（朝向跟随钟馗朝向自动镜像 X）
 # 敌人被吸时朝这个点飞，到达 capture 触发瞬间敌人正好在此处消失（视觉上=飞进葫芦）
 var vanish_point_offset_x: float = 78.0
@@ -127,6 +134,12 @@ func load_config() -> void:
 	title_pos_x          = cfg.get_value("ui", "title_pos_x", title_pos_x)
 	title_pos_y          = cfg.get_value("ui", "title_pos_y", title_pos_y)
 	title_scale          = cfg.get_value("ui", "title_scale", title_scale)
+	coin_icon_pos_x      = cfg.get_value("ui", "coin_icon_pos_x", coin_icon_pos_x)
+	coin_icon_pos_y      = cfg.get_value("ui", "coin_icon_pos_y", coin_icon_pos_y)
+	coin_icon_scale      = cfg.get_value("ui", "coin_icon_scale", coin_icon_scale)
+	coin_digits_pos_x    = cfg.get_value("ui", "coin_digits_pos_x", coin_digits_pos_x)
+	coin_digits_pos_y    = cfg.get_value("ui", "coin_digits_pos_y", coin_digits_pos_y)
+	coin_digits_scale    = cfg.get_value("ui", "coin_digits_scale", coin_digits_scale)
 	vanish_point_offset_x = cfg.get_value("char", "vanish_point_offset_x", vanish_point_offset_x)
 	vanish_point_offset_y = cfg.get_value("char", "vanish_point_offset_y", vanish_point_offset_y)
 	if enemy_tuning_is_current:
@@ -232,6 +245,12 @@ func save_config() -> void:
 	cfg.set_value("ui", "title_pos_x", title_pos_x)
 	cfg.set_value("ui", "title_pos_y", title_pos_y)
 	cfg.set_value("ui", "title_scale", title_scale)
+	cfg.set_value("ui", "coin_icon_pos_x", coin_icon_pos_x)
+	cfg.set_value("ui", "coin_icon_pos_y", coin_icon_pos_y)
+	cfg.set_value("ui", "coin_icon_scale", coin_icon_scale)
+	cfg.set_value("ui", "coin_digits_pos_x", coin_digits_pos_x)
+	cfg.set_value("ui", "coin_digits_pos_y", coin_digits_pos_y)
+	cfg.set_value("ui", "coin_digits_scale", coin_digits_scale)
 	cfg.set_value("char", "vanish_point_offset_x", vanish_point_offset_x)
 	cfg.set_value("char", "vanish_point_offset_y", vanish_point_offset_y)
 	cfg.set_value("enemy", "mh_hammer_scale", mh_hammer_scale)

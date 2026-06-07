@@ -1,6 +1,7 @@
-[gd_scene load_steps=2 format=3 uid="uid://b7hud0001"]
+[gd_scene load_steps=3 format=3 uid="uid://b7hud0001"]
 
 [ext_resource type="Script" uid="uid://dudegrph5xgfp" path="res://scripts/hud.gd" id="1_hud"]
+[ext_resource type="Texture2D" path="res://assets/sprites/Icon/Coin.png" id="2_coin"]
 
 [node name="HUD" type="CanvasLayer"]
 script = ExtResource("1_hud")
@@ -29,8 +30,23 @@ layout_mode = 2
 text = "TIME 90"
 theme_override_font_sizes/font_size = 56
 
+[node name="CoinCounter" type="Control" parent="TopBar"]
+custom_minimum_size = Vector2(260, 80)
+layout_mode = 2
+
+[node name="Icon" type="TextureRect" parent="TopBar/CoinCounter"]
+custom_minimum_size = Vector2(64, 68)
+layout_mode = 2
+texture = ExtResource("2_coin")
+expand_mode = 1
+stretch_mode = 5
+
+[node name="Digits" type="HBoxContainer" parent="TopBar/CoinCounter"]
+layout_mode = 2
+theme_override_constants/separation = 0
+
 [node name="ScoreLabel" type="Label" parent="TopBar"]
-custom_minimum_size = Vector2(550, 80)
+custom_minimum_size = Vector2(420, 80)
 layout_mode = 2
 text = "SCORE 000000"
 horizontal_alignment = 2

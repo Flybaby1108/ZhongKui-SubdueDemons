@@ -24,6 +24,8 @@ func _input(event: InputEvent) -> void:
 			var player = get_tree().get_first_node_in_group("player")
 			if player != null:
 				player.queue_redraw()
+			for marker in get_tree().get_nodes_in_group("vanish_marker"):
+				marker.queue_redraw()
 			# Refresh debug draw on Boss（被攻击范围紫色矩形随面板可见性显隐）
 			for boss in get_tree().get_nodes_in_group("boss"):
 				boss.queue_redraw()
@@ -229,6 +231,19 @@ func _build_ui() -> void:
 	_add_row("Title Scale",       "title_scale",     0.1, 3.0,  0.02)
 	_vbox.add_child(HSeparator.new())
 
+	var title_coin_hud := Label.new()
+	title_coin_hud.text = "▼ 关卡 HUD 铜钱统计"
+	title_coin_hud.add_theme_font_size_override("font_size", 22)
+	title_coin_hud.add_theme_color_override("font_color", Color(1, 0.75, 0.25, 1))
+	_vbox.add_child(title_coin_hud)
+	_add_row("铜钱图标位置 X", "coin_icon_pos_x", -100, 400, 1.0)
+	_add_row("铜钱图标位置 Y", "coin_icon_pos_y", -100, 150, 1.0)
+	_add_row("铜钱图标大小", "coin_icon_scale", 0.1, 2.0, 0.01)
+	_add_row("铜钱数字位置 X", "coin_digits_pos_x", -100, 500, 1.0)
+	_add_row("铜钱数字位置 Y", "coin_digits_pos_y", -100, 150, 1.0)
+	_add_row("铜钱数字大小", "coin_digits_scale", 0.1, 2.0, 0.01)
+	_vbox.add_child(HSeparator.new())
+
 	var title_vanish := Label.new()
 	title_vanish.text = "▼ 葫芦吸入消失点 (相对钟馗中心)"
 	title_vanish.add_theme_font_size_override("font_size", 22)
@@ -238,7 +253,7 @@ func _build_ui() -> void:
 	_add_row("Vanish Point Offset Y", "vanish_point_offset_y", -200, 200, 1.0)
 	_vbox.add_child(HSeparator.new())
 
-	_add_row("Timer Label Y",    "hold_warning_offset_y", -400, 0,  2.0)
+	_add_row("倒计时位置",          "hold_warning_offset_y", -400, 0,  2.0)
 
 func _add_row(label_text: String, prop: String, min_v: float, max_v: float, step: float) -> void:
 	var hbox := HBoxContainer.new()
@@ -340,6 +355,12 @@ func _reset_defaults() -> void:
 	CharTuning.inhale_fx_scale = 1.0
 	CharTuning.inhale_fx_offset_x = 0.0
 	CharTuning.inhale_fx_offset_y = 0.0
+	CharTuning.coin_icon_pos_x = 0.0
+	CharTuning.coin_icon_pos_y = 2.0
+	CharTuning.coin_icon_scale = 0.45
+	CharTuning.coin_digits_pos_x = 72.0
+	CharTuning.coin_digits_pos_y = 6.0
+	CharTuning.coin_digits_scale = 1.0
 	for row in _rows:
 		var slider: HSlider = row["slider"]
 		var value_label: Label = row["value_label"]

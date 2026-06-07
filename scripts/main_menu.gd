@@ -29,6 +29,8 @@ var _title_fade_t: float = 0.0
 
 func _ready() -> void:
 	GameState.reset_game()
+	GameState.enable_start_sequence_music()
+	GameState.play_start_music_if_ready()
 	# 启动后台线程加载第一关
 	ResourceLoader.load_threaded_request(STAGE_1_PATH)
 	# 优先复用 cg_intro 阶段已加载并 GPU 预热好的 BG 帧（autoload 共享缓存），
@@ -99,13 +101,16 @@ func _input(event: InputEvent) -> void:
 		if not _loading_done:
 			return
 		get_viewport().set_input_as_handled()
+		GameState.stop_start_sequence_music()
 		# 优先用已预加载的 PackedScene 切换，避免再次读盘
 		var packed: PackedScene = ResourceLoader.load_threaded_get(STAGE_1_PATH)
 		if packed != null:
 			GameState.current_stage = 1
 			GameState.score = 0
+			GameState.coins = 0
 			GameState.lives = GameState.MAX_LIVES
 			GameState.score_changed.emit(GameState.score)
+			GameState.coins_changed.emit(GameState.coins)
 			GameState.lives_changed.emit(GameState.lives)
 			get_tree().change_scene_to_packed(packed)
 		else:

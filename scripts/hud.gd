@@ -3,10 +3,28 @@ extends CanvasLayer
 @onready var hearts_container: HBoxContainer = $TopBar/Hearts
 @onready var stage_label: Label = $TopBar/StageLabel
 @onready var time_label: Label = $TopBar/TimeLabel
+@onready var coin_icon: TextureRect = $TopBar/CoinCounter/Icon
+@onready var coin_digits_container: HBoxContainer = $TopBar/CoinCounter/Digits
 @onready var score_label: Label = $TopBar/ScoreLabel
 
 const HEART_FULL := preload("res://assets/sprites/ui_heart_full.png")
 const HEART_EMPTY := preload("res://assets/sprites/ui_heart_empty.png")
+const COIN_ICON_BASE_SIZE := Vector2(141, 150)
+const COIN_DIGIT_BASE_SIZE := Vector2(40, 60)
+const COIN_FLY_DURATION := 0.45
+const COIN_FLY_ARC_HEIGHT := 90.0
+const DIGIT_TEXTURES := [
+	preload("res://assets/sprites/ui_digit_0.png"),
+	preload("res://assets/sprites/ui_digit_1.png"),
+	preload("res://assets/sprites/ui_digit_2.png"),
+	preload("res://assets/sprites/ui_digit_3.png"),
+	preload("res://assets/sprites/ui_digit_4.png"),
+	preload("res://assets/sprites/ui_digit_5.png"),
+	preload("res://assets/sprites/ui_digit_6.png"),
+	preload("res://assets/sprites/ui_digit_7.png"),
+	preload("res://assets/sprites/ui_digit_8.png"),
+	preload("res://assets/sprites/ui_digit_9.png"),
+]
 
 # ===== Boss 血条 =====
 # 屏幕顶部居中的红色血条。Boss spawn 时由 boss.gd 调 show_boss_bar() 出现，
@@ -29,14 +47,21 @@ var _boss_bar_label: Label
 var _boss_bar_max: int = 1
 var _boss_bar_cur: int = 1
 var _boss_flash_tween: Tween
+var _coin_fly_layer: Control
+var _coin_icon_pulse_tween: Tween
 
 func _ready() -> void:
 	GameState.score_changed.connect(_on_score_changed)
 	GameState.lives_changed.connect(_on_lives_changed)
 	GameState.stage_changed.connect(_on_stage_changed)
+	GameState.coins_changed.connect(_on_coins_changed)
+	CharTuning.tuning_changed.connect(_apply_coin_tuning)
 	_rebuild_hearts(GameState.lives)
 	_on_score_changed(GameState.score)
 	_on_stage_changed(GameState.current_stage)
+	_on_coins_changed(GameState.coins)
+	_apply_coin_tuning()
+	_build_coin_fly_layer()
 	_build_boss_bar()
 
 func _rebuild_hearts(lives: int) -> void:
@@ -52,6 +77,33 @@ func _rebuild_hearts(lives: int) -> void:
 func _on_score_changed(score: int) -> void:
 	score_label.text = "SCORE %06d" % score
 
+func _on_coins_changed(coins: int) -> void:
+	for child in coin_digits_container.get_children():
+		child.free()
+	var text := str(max(0, coins))
+	for ch in text:
+		var digit := int(ch)
+		var tex_rect := TextureRect.new()
+		tex_rect.texture = DIGIT_TEXTURES[digit]
+		tex_rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		tex_rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		coin_digits_container.add_child(tex_rect)
+	_apply_coin_tuning()
+
+func _apply_coin_tuning() -> void:
+	var icon_scale: float = max(0.01, CharTuning.coin_icon_scale)
+	coin_icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	coin_icon.position = Vector2(CharTuning.coin_icon_pos_x, CharTuning.coin_icon_pos_y)
+	coin_icon.custom_minimum_size = COIN_ICON_BASE_SIZE * icon_scale
+	coin_icon.size = coin_icon.custom_minimum_size
+
+	var digit_scale: float = max(0.01, CharTuning.coin_digits_scale)
+	coin_digits_container.position = Vector2(CharTuning.coin_digits_pos_x, CharTuning.coin_digits_pos_y)
+	for child in coin_digits_container.get_children():
+		if child is TextureRect:
+			child.custom_minimum_size = COIN_DIGIT_BASE_SIZE * digit_scale
+			child.size = child.custom_minimum_size
+
 func _on_lives_changed(lives: int) -> void:
 	_rebuild_hearts(lives)
 
@@ -61,6 +113,80 @@ func _on_stage_changed(stage: int) -> void:
 func update_time(time_remaining: float) -> void:
 	var seconds = int(time_remaining)
 	time_label.text = "TIME %02d" % seconds
+
+func play_coin_pickup_fly(world_position: Vector2, texture: Texture2D, start_size: Vector2 = Vector2.ZERO) -> void:
+	if texture == null or coin_icon == null:
+		return
+	if _coin_fly_layer == null:
+		_build_coin_fly_layer()
+	var start_pos := _world_to_screen(world_position)
+	var target_size := _get_coin_icon_screen_size()
+	var end_pos := _get_coin_icon_screen_center()
+	if start_size == Vector2.ZERO:
+		start_size = texture.get_size() * 0.4
+	start_size = start_size.max(Vector2(1.0, 1.0))
+	target_size = target_size.max(Vector2(1.0, 1.0))
+
+	var fly_coin := TextureRect.new()
+	fly_coin.name = "FlyingCoin"
+	fly_coin.texture = texture
+	fly_coin.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	fly_coin.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	fly_coin.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	fly_coin.pivot_offset = start_size * 0.5
+	fly_coin.size = start_size
+	fly_coin.position = start_pos - fly_coin.pivot_offset
+	_coin_fly_layer.add_child(fly_coin)
+
+	var mid_pos := (start_pos + end_pos) * 0.5 + Vector2(0.0, -COIN_FLY_ARC_HEIGHT)
+	var tween := create_tween()
+	tween.set_parallel(true)
+	tween.tween_method(_set_flying_coin_center.bind(fly_coin, start_pos, mid_pos, end_pos), 0.0, 1.0, COIN_FLY_DURATION).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN_OUT)
+	tween.tween_property(fly_coin, "size", target_size, COIN_FLY_DURATION).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN_OUT)
+	tween.tween_property(fly_coin, "pivot_offset", target_size * 0.5, COIN_FLY_DURATION).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN_OUT)
+	tween.tween_property(fly_coin, "modulate:a", 0.0, 0.08).set_delay(COIN_FLY_DURATION - 0.08)
+	tween.finished.connect(func() -> void:
+		if is_instance_valid(fly_coin):
+			fly_coin.queue_free()
+		_pulse_coin_icon()
+	)
+
+func _build_coin_fly_layer() -> void:
+	if _coin_fly_layer != null:
+		return
+	_coin_fly_layer = Control.new()
+	_coin_fly_layer.name = "CoinFlyLayer"
+	_coin_fly_layer.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_coin_fly_layer.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	add_child(_coin_fly_layer)
+
+func _world_to_screen(world_position: Vector2) -> Vector2:
+	return get_viewport().get_canvas_transform() * world_position
+
+func _get_coin_icon_screen_center() -> Vector2:
+	return coin_icon.get_global_rect().get_center()
+
+func _get_coin_icon_screen_size() -> Vector2:
+	return coin_icon.get_global_rect().size
+
+func _set_flying_coin_center(t: float, fly_coin: TextureRect, start_pos: Vector2, mid_pos: Vector2, end_pos: Vector2) -> void:
+	if not is_instance_valid(fly_coin):
+		return
+	var a := start_pos.lerp(mid_pos, t)
+	var b := mid_pos.lerp(end_pos, t)
+	var center := a.lerp(b, t)
+	fly_coin.position = center - fly_coin.pivot_offset
+
+func _pulse_coin_icon() -> void:
+	if coin_icon == null:
+		return
+	if _coin_icon_pulse_tween != null and _coin_icon_pulse_tween.is_valid():
+		_coin_icon_pulse_tween.kill()
+	coin_icon.pivot_offset = coin_icon.size * 0.5
+	coin_icon.scale = Vector2.ONE
+	_coin_icon_pulse_tween = create_tween()
+	_coin_icon_pulse_tween.tween_property(coin_icon, "scale", Vector2(1.16, 1.16), 0.08).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	_coin_icon_pulse_tween.tween_property(coin_icon, "scale", Vector2.ONE, 0.12).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
 
 # ===== Boss 血条相关 =====
 

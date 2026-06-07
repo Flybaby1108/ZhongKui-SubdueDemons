@@ -155,4 +155,6 @@ tile_set = ExtResource("2_tileset")
 
 [node name="Pickups" type="Node2D" parent="."]
 
+[node name="FloatingPlatforms" type="Node2D" parent="."]
+
 [node name="UI" parent="." instance=ExtResource("4_hud")]

@@ -118,6 +118,80 @@
         .cell:hover {
             opacity: 0.8;
         }
+        .platform-layer {
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+            z-index: 50;
+        }
+        .platform-object {
+            position: absolute;
+            background-size: 100% 100%;
+            transform-origin: center center;
+            outline: 2px solid rgba(255, 255, 255, 0.75);
+            box-shadow: 0 0 0 2px rgba(0, 122, 204, 0.75);
+            pointer-events: none;
+        }
+        .platform-object.inactive {
+            outline-color: rgba(255, 255, 255, 0.25);
+            box-shadow: none;
+            opacity: 0.75;
+        }
+        .platform-move-range {
+            position: absolute;
+            height: 2px;
+            background: rgba(126, 200, 227, 0.85);
+            transform: translateY(-50%);
+        }
+        .platform-move-range.vertical {
+            width: 2px;
+            height: auto;
+            transform: translateX(-50%);
+        }
+        .platform-collision-cell {
+            position: absolute;
+            background: rgba(255, 64, 64, 0.5);
+            outline: 1px solid rgba(255,255,255,0.55);
+            box-sizing: border-box;
+        }
+        .platform-panel {
+            display: none;
+            flex-direction: column;
+            gap: 12px;
+            background: #252526;
+            padding: 16px;
+            border-radius: 8px;
+            width: 100%;
+            box-sizing: border-box;
+        }
+        .platform-panel.visible {
+            display: flex;
+        }
+        .platform-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            align-items: center;
+        }
+        .platform-row label {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 13px;
+            color: #bbb;
+        }
+        .platform-row input {
+            width: 82px;
+            background: #1e1e1e;
+            color: #ddd;
+            border: 1px solid #555;
+            border-radius: 4px;
+            padding: 6px;
+            box-sizing: border-box;
+        }
+        .platform-mode.active {
+            background: #0b6fa4;
+        }
 
         /* ── Sidebar / Tools ── */
         .sidebar {
@@ -223,12 +297,17 @@
             Chapter1 <span class="stage-badge">Stage 1</span>
         </button>
         <button class="tab-btn" data-stage="2">
-            ChapterBoss <span class="stage-badge">Stage 2</span>
+            Chapter2 <span class="stage-badge">Stage 2</span>
+        </button>
+        <button class="tab-btn" data-stage="3">
+            ChapterBoss <span class="stage-badge">Stage 3</span>
         </button>
     </div>
 
     <!-- Grid -->
-    <div class="grid" id="grid"></div>
+    <div class="grid" id="grid">
+        <div class="platform-layer" id="platform-layer"></div>
+    </div>
 
     <!-- Level hint -->
     <div class="level-hint" id="level-hint">
@@ -285,6 +364,24 @@
                 <span>元宝 (r)</span>
             </div>
         </div>
+        <div class="platform-panel" id="platform-panel">
+            <div class="platform-row">
+                <button id="btn-platform-select" class="platform-mode active">选择平台</button>
+                <button id="btn-platform-collision" class="platform-mode">绘制平台碰撞</button>
+                <button id="btn-add-platform" style="background:#2d7a2d;">新增浮动平台</button>
+                <button id="btn-delete-platform" style="background:#a93226;">删除选中平台</button>
+            </div>
+            <div class="platform-row">
+                <label>X <input id="platform-x" type="number" step="1"></label>
+                <label>Y <input id="platform-y" type="number" step="1"></label>
+                <label>缩放 <input id="platform-scale" type="number" step="0.05" min="0.05"></label>
+                <label>左移范围 <input id="platform-left" type="number" step="1" min="0"></label>
+                <label>右移范围 <input id="platform-right" type="number" step="1" min="0"></label>
+                <label>上移范围 <input id="platform-up" type="number" step="1" min="0"></label>
+                <label>下移范围 <input id="platform-down" type="number" step="1" min="0"></label>
+                <label>速度 <input id="platform-speed" type="number" step="1" min="0"></label>
+            </div>
+        </div>
     </div>
 
     <!-- IO Section -->
@@ -294,7 +391,7 @@
             <p style="color:#aaa; margin:0 0 12px;">
                 1. 切换上方 Tab 选择关卡。&nbsp;
                 2. 拖拽绘制地形/实体。&nbsp;
-                3. <b>导出</b> 将生成同时包含 <code>Chapter1</code> 和 <code>ChapterBoss</code> 的完整 <code>level_data.gd</code>，两个关卡数据互不影响。
+                3. <b>导出</b> 将生成包含 <code>Chapter1</code>、<code>Chapter2</code> 和 <code>ChapterBoss</code> 的完整 <code>level_data.gd</code>，各关卡数据互不影响。
             </p>
         </div>
         <div class="button-group">
@@ -326,6 +423,11 @@
             bgImage: 'assets/sprites/Chapter1/Chapter1_BG_a.png',
         },
         2: {
+            name:    'Chapter2',
+            bgImage: 'assets/sprites/Chapter2/Chapter2_BG_a.png',
+            bgVersion: '20260602',
+        },
+        3: {
             name:    'ChapterBoss',
             bgImage: 'assets/sprites/ChapterBoss/ChapterBoss_BG_a.png',
         },
@@ -335,6 +437,86 @@
     const allMapData = {};
     for (const stageKey of Object.keys(LEVEL_DEFS)) {
         allMapData[stageKey] = Array.from({ length: ROWS }, () => Array(COLS).fill(' '));
+    }
+    const PLATFORM_CELL_SIZE = 10;
+    const PLATFORM_TEXTURES = {
+        'res://assets/sprites/Chapter2/Chapter2_Platform1_01.png': {
+            editorUrl: 'assets/sprites/Chapter2/Chapter2_Platform1_01.png',
+            width: 542,
+            height: 326,
+            collisionWidth: 542,
+            collisionHeight: 254,
+        },
+        'res://assets/sprites/Chapter2/Chapter2_Platform1.png': {
+            editorUrl: 'assets/sprites/Chapter2/Chapter2_Platform1.png',
+            width: 542,
+            height: 254,
+        },
+        'res://assets/sprites/Chapter2/Chapter2_Platform2.png': {
+            editorUrl: 'assets/sprites/Chapter2/Chapter2_Platform2.png',
+            width: 452,
+            height: 316,
+        },
+        'res://assets/sprites/Chapter2/Chapter2_Platform2_01.png': {
+            editorUrl: 'assets/sprites/Chapter2/Chapter2_Platform2_01.png',
+            width: 452,
+            height: 386,
+            collisionWidth: 452,
+            collisionHeight: 316,
+        },
+    };
+    const DEFAULT_PLATFORM_TEXTURE_PATH = 'res://assets/sprites/Chapter2/Chapter2_Platform1_01.png';
+    const allPlatformData = {};
+    for (const stageKey of Object.keys(LEVEL_DEFS)) {
+        allPlatformData[stageKey] = [];
+    }
+
+    function createDefaultPlatformCollision() {
+        const cells = [];
+        for (let y = 2; y <= 3; y++) {
+            for (let x = 4; x <= 49; x++) cells.push({ x, y });
+        }
+        return cells;
+    }
+
+    function createDefaultPlatform() {
+        return {
+            texture_path: DEFAULT_PLATFORM_TEXTURE_PATH,
+            x: 960,
+            y: 430,
+            scale_x: 1,
+            scale_y: 1,
+            move_left: 180,
+            move_right: 180,
+            move_up: 0,
+            move_down: 0,
+            speed: 80,
+            collision_cells: createDefaultPlatformCollision(),
+        };
+    }
+
+    function platformTextureFor(platform) {
+        const path = platform && platform.texture_path ? platform.texture_path : DEFAULT_PLATFORM_TEXTURE_PATH;
+        return PLATFORM_TEXTURES[path] || PLATFORM_TEXTURES[DEFAULT_PLATFORM_TEXTURE_PATH];
+    }
+
+    function platformCollisionWidth(texture) {
+        return texture.collisionWidth || texture.width;
+    }
+
+    function platformCollisionHeight(texture) {
+        return texture.collisionHeight || texture.height;
+    }
+
+    function normalizePlatform(platform) {
+        if (!platform.texture_path) platform.texture_path = DEFAULT_PLATFORM_TEXTURE_PATH;
+        if (!Number.isFinite(platform.move_left)) platform.move_left = 0;
+        if (!Number.isFinite(platform.move_right)) platform.move_right = 0;
+        if (!Number.isFinite(platform.move_up)) platform.move_up = 0;
+        if (!Number.isFinite(platform.move_down)) platform.move_down = 0;
+        if (!Number.isFinite(platform.speed)) platform.speed = 80;
+        if (!Array.isArray(platform.collision_cells)) platform.collision_cells = createDefaultPlatformCollision();
+        return platform;
     }
 
     // ── Shared Tool / Color State ──────────────────────────────────────────────
@@ -365,11 +547,15 @@
     let currentChar  = ' ';
     let currentColor = colorMap[' '];
     let isMouseDown  = false;
+    let platformMode = 'select';
+    let selectedPlatformIndex = 0;
+    let collisionPaintValue = true;
 
     // ── Active Tab State ───────────────────────────────────────────────────────
     let activeStage = 1;   // integer key into LEVEL_DEFS / allMapData
 
     function getMapData() { return allMapData[activeStage]; }
+    function getPlatformData() { return allPlatformData[activeStage] || []; }
 
     // ── DOM Refs ───────────────────────────────────────────────────────────────
     const gridEl       = document.getElementById('grid');
@@ -379,6 +565,18 @@
     const hintName     = document.getElementById('level-hint-name');
     const hintStage    = document.getElementById('level-hint-stage');
     const hintBg       = document.getElementById('level-hint-bg');
+    const platformLayer = document.getElementById('platform-layer');
+    const platformPanel = document.getElementById('platform-panel');
+    const platformInputs = {
+        x: document.getElementById('platform-x'),
+        y: document.getElementById('platform-y'),
+        scale: document.getElementById('platform-scale'),
+        move_left: document.getElementById('platform-left'),
+        move_right: document.getElementById('platform-right'),
+        move_up: document.getElementById('platform-up'),
+        move_down: document.getElementById('platform-down'),
+        speed: document.getElementById('platform-speed'),
+    };
 
     // ── Build Grid DOM (once) ──────────────────────────────────────────────────
     // We reuse the same DOM cells for all levels; only mapData + bg image swap.
@@ -390,8 +588,8 @@
             cell.className = 'cell';
             cell.dataset.x = x;
             cell.dataset.y = y;
-            cell.addEventListener('mousedown', () => { isMouseDown = true;  paint(x, y, cell); });
-            cell.addEventListener('mouseover', () => { if (isMouseDown) paint(x, y, cell); });
+            cell.addEventListener('mousedown', () => { isMouseDown = true; handleCellMouseDown(x, y, cell); });
+            cell.addEventListener('mouseover', () => { if (isMouseDown) handleCellMouseOver(x, y, cell); });
             gridEl.appendChild(cell);
             cellEls.push(cell);
         }
@@ -424,6 +622,10 @@
     });
     gridEl.addEventListener('mouseleave', () => { brushCursor.style.display = 'none'; });
 
+    function isPlatformEditingActive() {
+        return platformMode === 'collision';
+    }
+
     // ── Tool Button Styles ─────────────────────────────────────────────────────
     function pickTextColor(rgbaStr) {
         const m = rgbaStr.match(/rgba?\(([^)]+)\)/);
@@ -452,10 +654,44 @@
             tool.classList.add('selected');
             currentChar  = tool.dataset.char;
             currentColor = colorMap[currentChar];
-            gridEl.style.cursor = ['#', '=', 'X'].includes(currentChar) ? 'none' : 'crosshair';
+            if (!isPlatformEditingActive()) {
+                gridEl.style.cursor = ['#', '=', 'X'].includes(currentChar) ? 'none' : 'crosshair';
+            }
         });
     });
     gridEl.style.cursor = 'crosshair';
+
+    document.getElementById('btn-platform-select').addEventListener('click', () => setPlatformMode('select'));
+    document.getElementById('btn-platform-collision').addEventListener('click', () => setPlatformMode('collision'));
+    document.getElementById('btn-add-platform').addEventListener('click', () => {
+        const platforms = getPlatformData();
+        platforms.push(createDefaultPlatform());
+        selectedPlatformIndex = platforms.length - 1;
+        updatePlatformPanel();
+        renderPlatforms();
+    });
+    document.getElementById('btn-delete-platform').addEventListener('click', () => {
+        const platforms = getPlatformData();
+        if (!selectedPlatform()) return;
+        platforms.splice(selectedPlatformIndex, 1);
+        selectedPlatformIndex = Math.max(0, Math.min(selectedPlatformIndex, platforms.length - 1));
+        updatePlatformPanel();
+        renderPlatforms();
+    });
+    for (const [key, input] of Object.entries(platformInputs)) {
+        input.addEventListener('input', () => {
+            const platform = selectedPlatform();
+            if (!platform) return;
+            const value = parseFloat(input.value);
+            if (!Number.isFinite(value)) return;
+            if (key === 'scale') {
+                setPlatformScale(platform, value);
+            } else {
+                platform[key] = value;
+            }
+            renderPlatforms();
+        });
+    }
 
     // ── Keyboard Shortcuts ─────────────────────────────────────────────────────
     window.addEventListener('keydown', (e) => {
@@ -472,6 +708,7 @@
         stageKey = parseInt(stageKey);
         if (!(stageKey in LEVEL_DEFS)) return;
         activeStage = stageKey;
+        selectedPlatformIndex = 0;
 
         // Update tab button states
         tabBtns.forEach(btn => {
@@ -480,7 +717,8 @@
 
         // Swap background image to match this level's foreground art
         const def = LEVEL_DEFS[stageKey];
-        gridEl.style.backgroundImage = `url('${def.bgImage}')`;
+        const bgUrl = def.bgVersion ? `${def.bgImage}?v=${def.bgVersion}` : def.bgImage;
+        gridEl.style.backgroundImage = `url('${bgUrl}')`;
 
         // Update hint bar
         hintName.textContent  = def.name;
@@ -489,6 +727,8 @@
 
         // Re-render grid with this level's data
         renderAll();
+        renderPlatforms();
+        updatePlatformPanel();
     }
 
     // Wire tab buttons
@@ -502,6 +742,23 @@
         if (labelRefreshScheduled) return;
         labelRefreshScheduled = true;
         requestAnimationFrame(() => { labelRefreshScheduled = false; refreshLabels(); });
+    }
+
+    function handleCellMouseDown(x, y, cellEl) {
+        if (isPlatformEditingActive()) {
+            collisionPaintValue = !platformCollisionHasCell(x, y);
+            paintPlatformCollision(x, y, collisionPaintValue);
+        } else {
+            paint(x, y, cellEl);
+        }
+    }
+
+    function handleCellMouseOver(x, y, cellEl) {
+        if (isPlatformEditingActive()) {
+            paintPlatformCollision(x, y, collisionPaintValue);
+        } else {
+            paint(x, y, cellEl);
+        }
     }
 
     function paint(x, y, cellEl) {
@@ -524,6 +781,56 @@
         scheduleLabelRefresh();
     }
 
+    function selectedPlatform() {
+        const platforms = getPlatformData();
+        if (selectedPlatformIndex < 0 || selectedPlatformIndex >= platforms.length) return null;
+        return normalizePlatform(platforms[selectedPlatformIndex]);
+    }
+
+    function getPlatformScale(platform) {
+        const scale = Number.isFinite(platform.scale_x) ? platform.scale_x : platform.scale_y;
+        return Number.isFinite(scale) ? scale : 1;
+    }
+
+    function setPlatformScale(platform, scale) {
+        platform.scale_x = scale;
+        platform.scale_y = scale;
+    }
+
+    function worldToSelectedPlatformCell(worldX, worldY) {
+        const platform = selectedPlatform();
+        if (!platform) return null;
+        const texture = platformTextureFor(platform);
+        const scale = getPlatformScale(platform);
+        if (scale === 0) return null;
+        const collisionWidth = platformCollisionWidth(texture);
+        const collisionHeight = platformCollisionHeight(texture);
+        const localX = (worldX - platform.x) / scale + collisionWidth / 2;
+        const localY = (worldY - platform.y) / scale + collisionHeight / 2;
+        if (localX < 0 || localX >= collisionWidth || localY < 0 || localY >= collisionHeight) return null;
+        return {
+            x: Math.floor(localX / PLATFORM_CELL_SIZE),
+            y: Math.floor(localY / PLATFORM_CELL_SIZE),
+        };
+    }
+
+    function platformCollisionHasCell(gridX, gridY) {
+        const cell = worldToSelectedPlatformCell((gridX + 0.5) * 10, (gridY + 0.5) * 10);
+        const platform = selectedPlatform();
+        if (!cell || !platform) return false;
+        return platform.collision_cells.some(c => c.x === cell.x && c.y === cell.y);
+    }
+
+    function paintPlatformCollision(gridX, gridY, shouldAdd) {
+        const cell = worldToSelectedPlatformCell((gridX + 0.5) * 10, (gridY + 0.5) * 10);
+        const platform = selectedPlatform();
+        if (!cell || !platform) return;
+        const idx = platform.collision_cells.findIndex(c => c.x === cell.x && c.y === cell.y);
+        if (shouldAdd && idx < 0) platform.collision_cells.push(cell);
+        if (!shouldAdd && idx >= 0) platform.collision_cells.splice(idx, 1);
+        renderPlatforms();
+    }
+
     // ── Render ─────────────────────────────────────────────────────────────────
     function renderCell(cellEl, char) {
         cellEl.style.backgroundColor = colorMap[char] || colorMap[' '];
@@ -539,6 +846,96 @@
             }
         }
         refreshLabels();
+    }
+
+    function renderPlatforms() {
+        platformLayer.innerHTML = '';
+        const platforms = getPlatformData();
+        platformLayer.style.display = 'block';
+        if (platforms.length === 0) {
+            return;
+        }
+        platforms.forEach((platform, index) => {
+            normalizePlatform(platform);
+            const scale = getPlatformScale(platform);
+            const texture = platformTextureFor(platform);
+            const moveLeft = Number.isFinite(platform.move_left) ? platform.move_left : 0;
+            const moveRight = Number.isFinite(platform.move_right) ? platform.move_right : 0;
+            const moveUp = Number.isFinite(platform.move_up) ? platform.move_up : 0;
+            const moveDown = Number.isFinite(platform.move_down) ? platform.move_down : 0;
+            if (moveLeft > 0 || moveRight > 0) {
+                const range = document.createElement('div');
+                range.className = 'platform-move-range';
+                range.style.left = ((platform.x - moveLeft) / 1920 * 100) + '%';
+                range.style.top = (platform.y / 1080 * 100) + '%';
+                range.style.width = ((moveLeft + moveRight) / 1920 * 100) + '%';
+                platformLayer.appendChild(range);
+            }
+            if (moveUp > 0 || moveDown > 0) {
+                const range = document.createElement('div');
+                range.className = 'platform-move-range vertical';
+                range.style.left = (platform.x / 1920 * 100) + '%';
+                range.style.top = ((platform.y - moveUp) / 1080 * 100) + '%';
+                range.style.height = ((moveUp + moveDown) / 1080 * 100) + '%';
+                platformLayer.appendChild(range);
+            }
+
+            const el = document.createElement('div');
+            el.className = 'platform-object' + (index === selectedPlatformIndex ? '' : ' inactive');
+            el.style.backgroundImage = `url('${texture.editorUrl}')`;
+            el.style.left = ((platform.x - texture.width * scale / 2) / 1920 * 100) + '%';
+            el.style.top = ((platform.y - texture.height * scale / 2) / 1080 * 100) + '%';
+            el.style.width = (texture.width * scale / 1920 * 100) + '%';
+            el.style.height = (texture.height * scale / 1080 * 100) + '%';
+            el.style.pointerEvents = platformMode === 'select' ? 'auto' : 'none';
+            el.addEventListener('mousedown', (e) => {
+                e.preventDefault();
+                selectedPlatformIndex = index;
+                updatePlatformPanel();
+                renderPlatforms();
+            });
+            platformLayer.appendChild(el);
+
+            if (index === selectedPlatformIndex) {
+                for (const c of platform.collision_cells) {
+                    const cell = document.createElement('div');
+                    cell.className = 'platform-collision-cell';
+                    const worldLeft = platform.x + (c.x * PLATFORM_CELL_SIZE - platformCollisionWidth(texture) / 2) * scale;
+                    const worldTop = platform.y + (c.y * PLATFORM_CELL_SIZE - platformCollisionHeight(texture) / 2) * scale;
+                    cell.style.left = (worldLeft / 1920 * 100) + '%';
+                    cell.style.top = (worldTop / 1080 * 100) + '%';
+                    cell.style.width = (PLATFORM_CELL_SIZE * scale / 1920 * 100) + '%';
+                    cell.style.height = (PLATFORM_CELL_SIZE * scale / 1080 * 100) + '%';
+                    platformLayer.appendChild(cell);
+                }
+            }
+        });
+    }
+
+    function updatePlatformPanel() {
+        platformPanel.classList.add('visible');
+        const platform = selectedPlatform();
+        const disabled = !platform;
+        for (const input of Object.values(platformInputs)) input.disabled = disabled;
+        document.getElementById('btn-delete-platform').disabled = disabled;
+        if (!platform) return;
+        platformInputs.x.value = platform.x;
+        platformInputs.y.value = platform.y;
+        platformInputs.scale.value = getPlatformScale(platform);
+        platformInputs.move_left.value = Number.isFinite(platform.move_left) ? platform.move_left : 0;
+        platformInputs.move_right.value = Number.isFinite(platform.move_right) ? platform.move_right : 0;
+        platformInputs.move_up.value = Number.isFinite(platform.move_up) ? platform.move_up : 0;
+        platformInputs.move_down.value = Number.isFinite(platform.move_down) ? platform.move_down : 0;
+        platformInputs.speed.value = platform.speed;
+    }
+
+    function setPlatformMode(mode) {
+        platformMode = mode;
+        document.getElementById('btn-platform-select').classList.toggle('active', mode === 'select');
+        document.getElementById('btn-platform-collision').classList.toggle('active', mode === 'collision');
+        platformLayer.style.pointerEvents = 'none';
+        gridEl.style.cursor = isPlatformEditingActive() ? 'cell' : (['#', '=', 'X'].includes(currentChar) ? 'none' : 'crosshair');
+        renderPlatforms();
     }
 
     function refreshLabels() {
@@ -594,6 +991,34 @@
         out.push('');
         out.push('const TILE_SOURCES := {"#": 0, ".": 1, "=": 2}');
         out.push('const PICKUP_TYPES := {"r": 2}');
+        out.push('');
+        out.push('const FLOATING_PLATFORMS := {');
+        for (const stageKey of stageKeys) {
+            out.push('\t' + stageKey + ': [');
+            for (const platform of allPlatformData[stageKey]) {
+                out.push('\t\t{');
+                out.push('\t\t\t"texture_path": "' + (platform.texture_path || DEFAULT_PLATFORM_TEXTURE_PATH) + '",');
+                out.push('\t\t\t"position": Vector2(' + platform.x + ', ' + platform.y + '),');
+                const scale = getPlatformScale(platform);
+                out.push('\t\t\t"scale": Vector2(' + scale + ', ' + scale + '),');
+                out.push('\t\t\t"move_left": ' + (Number.isFinite(platform.move_left) ? platform.move_left : 0) + ',');
+                out.push('\t\t\t"move_right": ' + (Number.isFinite(platform.move_right) ? platform.move_right : 0) + ',');
+                out.push('\t\t\t"move_up": ' + (Number.isFinite(platform.move_up) ? platform.move_up : 0) + ',');
+                out.push('\t\t\t"move_down": ' + (Number.isFinite(platform.move_down) ? platform.move_down : 0) + ',');
+                out.push('\t\t\t"speed": ' + platform.speed + ',');
+                out.push('\t\t\t"collision_cells": [');
+                const sortedCells = platform.collision_cells.slice().sort((a, b) => a.y - b.y || a.x - b.x);
+                const cellLines = [];
+                for (let i = 0; i < sortedCells.length; i += 12) {
+                    cellLines.push(sortedCells.slice(i, i + 12).map(c => 'Vector2i(' + c.x + ', ' + c.y + ')').join(', '));
+                }
+                for (const line of cellLines) out.push('\t\t\t\t' + line + ',');
+                out.push('\t\t\t],');
+                out.push('\t\t},');
+            }
+            out.push('\t],');
+        }
+        out.push('}');
         out.push('');
         return out.join('\n');
     }
@@ -661,59 +1086,197 @@
 
     // ── Import Single Tab (lines with double-quotes → current tab only) ────────
     document.getElementById('btn-import').addEventListener('click', () => {
-        const mapData = getMapData();
-        const lines = ioText.value.split('\n');
-        const parsed = [];
-        for (const line of lines) {
-            const m = line.match(/"([^"]*)"/);
-            // 导入时静默清除已废弃的拾取物字符（a=苹果, c=樱桃, h=爱心）
-            if (m) parsed.push(m[1].replace(/[ach]/g, ' '));
-        }
+        const parsed = parseCurrentStageRows(ioText.value);
         if (parsed.length === 0) {
             alert('未找到有效的地图字符串！请确保粘贴的是带双引号的行。');
             return;
         }
+        applyMapRowsToStage(activeStage, parsed);
+        importFloatingPlatformsForStageFromText(ioText.value, activeStage);
+        refreshActiveStageView();
+        alert('已导入到「' + LEVEL_DEFS[activeStage].name + '」（Stage ' + activeStage + '）。其他关卡数据不受影响。');
+    });
+
+    function importAllLevelsFromText(text) {
+        const levelsText = extractLevelsDictText(text) || text;
+        let matched = 0;
+        const importedNames = [];
+        const importedStats = [];
+        for (const stageKeyText of Object.keys(LEVEL_DEFS)) {
+            const stageKey = parseInt(stageKeyText);
+            const blockText = extractStageArrayText(levelsText, stageKey);
+            if (!blockText) continue;
+            const parsed = parseMapRowsFromText(blockText);
+            if (parsed.length === 0) continue;
+            applyMapRowsToStage(stageKey, parsed);
+            matched++;
+            importedNames.push(LEVEL_DEFS[stageKey].name);
+            importedStats.push({ stageKey, rows: parsed.length });
+        }
+        importFloatingPlatformsFromText(text);
+        if (matched === 0) {
+            alert('未找到任何关卡数据块。请粘贴完整的 level_data.gd 文件内容。');
+            return false;
+        }
+        refreshActiveStageView();
+        const statText = importedStats.map(s => {
+            const name = LEVEL_DEFS[s.stageKey].name;
+            const platformCount = (allPlatformData[s.stageKey] || []).length;
+            return name + ': ' + s.rows + ' 行 / ' + platformCount + ' 平台';
+        }).join('；');
+        alert('已从完整文件导入 ' + matched + ' 个关卡（' + importedNames.join('、') + '）。\n' + statText + '\n当前显示「' + LEVEL_DEFS[activeStage].name + '」。');
+        return true;
+    }
+
+    function refreshActiveStageView() {
+        selectedPlatformIndex = 0;
+        renderAll();
+        renderPlatforms();
+        updatePlatformPanel();
+    }
+
+    function isMapRowString(value) {
+        return value.length >= 32 && /^[ #.=XPMRDZBr]+$/.test(value.replace(/[GS]/g, ' '));
+    }
+
+    function parseCurrentStageRows(text) {
+        const stageRows = parseStageRowsFromText(text, activeStage);
+        if (stageRows) return stageRows;
+        return parseMapRowsFromText(text);
+    }
+
+    function parseStageRowsFromText(text, stageKey) {
+        const levelsText = extractLevelsDictText(text);
+        if (!levelsText) return null;
+        const stageText = extractStageArrayText(levelsText, stageKey);
+        if (!stageText) return [];
+        return parseMapRowsFromText(stageText);
+    }
+
+    function parseMapRowsFromText(text) {
+        const parsed = [];
+        const lineRe = /"([^"]*)"/g;
+        let m;
+        while ((m = lineRe.exec(text)) !== null) {
+            // 导入时静默清除已废弃字符（a/c/h 拾取物、G/S 旧敌人）
+            if (isMapRowString(m[1])) parsed.push(m[1].replace(/[achGS]/g, ' '));
+        }
+        return parsed;
+    }
+
+    function applyMapRowsToStage(stageKey, parsed) {
+        const mapData = allMapData[stageKey];
         for (let y = 0; y < ROWS; y++) {
             for (let x = 0; x < COLS; x++) {
                 mapData[y][x] = (y < parsed.length && x < parsed[y].length) ? parsed[y][x] : ' ';
             }
         }
-        renderAll();
-        alert('已导入到「' + LEVEL_DEFS[activeStage].name + '」（Stage ' + activeStage + '）。其他关卡数据不受影响。');
-    });
+    }
 
-    function importAllLevelsFromText(text) {
-        // Match each stage block:  <stageKey>: [\n ... \n\t],
-        const blockRe = /^\s*(\d+)\s*:\s*\[([^\]]*)\]/gms;
-        let matched = 0;
-        const importedNames = [];
-        let match;
-        while ((match = blockRe.exec(text)) !== null) {
-            const stageKey = parseInt(match[1]);
-            if (!(stageKey in allMapData)) continue;
-            const blockText = match[2];
-            const parsed = [];
-            const lineRe = /"([^"]*)"/g;
-            let lm;
-            // 导入时静默清除已废弃的拾取物字符（a=苹果, c=樱桃, h=爱心）
-            while ((lm = lineRe.exec(blockText)) !== null) parsed.push(lm[1].replace(/[ach]/g, ' '));
-            if (parsed.length === 0) continue;
-            const mapData = allMapData[stageKey];
-            for (let y = 0; y < ROWS; y++) {
-                for (let x = 0; x < COLS; x++) {
-                    mapData[y][x] = (y < parsed.length && x < parsed[y].length) ? parsed[y][x] : ' ';
-                }
+    function extractLevelsDictText(text) {
+        const levelsIndex = text.indexOf('const LEVELS');
+        const levelsStart = levelsIndex >= 0 ? text.indexOf('{', levelsIndex) : -1;
+        return levelsStart >= 0 ? extractBalancedBlock(text, levelsStart, '{', '}') : null;
+    }
+
+    function extractStageArrayText(dictText, stageKey) {
+        const keyRe = new RegExp('(^|\\n)\\s*' + stageKey + '\\s*:\\s*\\[', 'm');
+        const m = keyRe.exec(dictText);
+        if (!m) return '';
+        const arrayStart = dictText.indexOf('[', m.index);
+        return arrayStart >= 0 ? extractBalancedBlock(dictText, arrayStart, '[', ']') : '';
+    }
+
+    function extractBalancedBlock(text, startIndex, openChar, closeChar) {
+        let depth = 0;
+        let inString = false;
+        for (let i = startIndex; i < text.length; i++) {
+            const ch = text[i];
+            const prev = i > 0 ? text[i - 1] : '';
+            if (ch === '"' && prev !== '\\') inString = !inString;
+            if (inString) continue;
+            if (ch === openChar) depth++;
+            if (ch === closeChar) {
+                depth--;
+                if (depth === 0) return text.slice(startIndex, i + 1);
             }
-            matched++;
-            importedNames.push(LEVEL_DEFS[stageKey].name);
         }
-        if (matched === 0) {
-            alert('未找到任何关卡数据块。请粘贴完整的 level_data.gd 文件内容。');
-            return false;
+        return '';
+    }
+
+    function splitTopLevelObjects(arrayText) {
+        const objects = [];
+        let depth = 0;
+        let start = -1;
+        let inString = false;
+        for (let i = 0; i < arrayText.length; i++) {
+            const ch = arrayText[i];
+            const prev = i > 0 ? arrayText[i - 1] : '';
+            if (ch === '"' && prev !== '\\') inString = !inString;
+            if (inString) continue;
+            if (ch === '{') {
+                if (depth === 0) start = i;
+                depth++;
+            } else if (ch === '}') {
+                depth--;
+                if (depth === 0 && start >= 0) objects.push(arrayText.slice(start, i + 1));
+            }
         }
-        renderAll();
-        alert('已从完整文件导入 ' + matched + ' 个关卡（' + importedNames.join('、') + '）。\n当前显示「' + LEVEL_DEFS[activeStage].name + '」。');
-        return true;
+        return objects;
+    }
+
+    function parsePlatformsArray(arrayText) {
+        const platforms = [];
+        for (const obj of splitTopLevelObjects(arrayText)) {
+            const texturePath = obj.match(/"texture_path"\s*:\s*"([^"]+)"/);
+            const pos = obj.match(/"position"\s*:\s*Vector2\(\s*([-.\d]+)\s*,\s*([-.\d]+)\s*\)/);
+            const scl = obj.match(/"scale"\s*:\s*Vector2\(\s*([-.\d]+)\s*,\s*([-.\d]+)\s*\)/);
+            const left = obj.match(/"move_left"\s*:\s*([-.\d]+)/);
+            const right = obj.match(/"move_right"\s*:\s*([-.\d]+)/);
+            const up = obj.match(/"move_up"\s*:\s*([-.\d]+)/);
+            const down = obj.match(/"move_down"\s*:\s*([-.\d]+)/);
+            const speed = obj.match(/"speed"\s*:\s*([-.\d]+)/);
+            const cells = [];
+            const cellRe = /Vector2i\(\s*(-?\d+)\s*,\s*(-?\d+)\s*\)/g;
+            let cm;
+            while ((cm = cellRe.exec(obj)) !== null) {
+                cells.push({ x: parseInt(cm[1]), y: parseInt(cm[2]) });
+            }
+            const scale = scl ? parseFloat(scl[1]) : 1;
+            platforms.push({
+                texture_path: texturePath ? texturePath[1] : DEFAULT_PLATFORM_TEXTURE_PATH,
+                x: pos ? parseFloat(pos[1]) : 960,
+                y: pos ? parseFloat(pos[2]) : 430,
+                scale_x: scale,
+                scale_y: scale,
+                move_left: left ? parseFloat(left[1]) : 0,
+                move_right: right ? parseFloat(right[1]) : 0,
+                move_up: up ? parseFloat(up[1]) : 0,
+                move_down: down ? parseFloat(down[1]) : 0,
+                speed: speed ? parseFloat(speed[1]) : 80,
+                collision_cells: cells.length > 0 ? cells : createDefaultPlatformCollision(),
+            });
+        }
+        return platforms;
+    }
+
+    function importFloatingPlatformsFromText(text) {
+        for (const stageKey of Object.keys(LEVEL_DEFS)) {
+            importFloatingPlatformsForStageFromText(text, parseInt(stageKey));
+        }
+        selectedPlatformIndex = 0;
+    }
+
+    function importFloatingPlatformsForStageFromText(text, stageKey) {
+        const constIndex = text.indexOf('const FLOATING_PLATFORMS');
+        if (constIndex < 0) return;
+        const dictStart = text.indexOf('{', constIndex);
+        if (dictStart < 0) return;
+        const dictText = extractBalancedBlock(text, dictStart, '{', '}');
+        if (!dictText) return;
+        const arrayText = extractStageArrayText(dictText, stageKey);
+        if (!arrayText) return;
+        allPlatformData[stageKey] = parsePlatformsArray(arrayText);
     }
 
     // ── Import All (full level_data.gd → each stage block → correct tab) ──────
@@ -746,6 +1309,12 @@
             importAllLevelsFromText(pasted);
             return;
         }
+        // Under file://, browsers block fetch() of local files. Open the picker
+        // synchronously while the user's click gesture is still active.
+        if (window.location.protocol === 'file:') {
+            filePicker.click();
+            return;
+        }
         // Try to auto-load from disk via fetch (works under http://).
         try {
             const response = await fetch('scripts/level_data.gd', { cache: 'no-store' });
@@ -758,7 +1327,8 @@
             console.warn('[import-all] fetch failed, falling back to file picker:', e);
         }
         // Open native file dialog as fallback.
-        filePicker.click();
+        filePicker.style.display = 'block';
+        alert('无法自动读取 scripts/level_data.gd。请使用下方文件选择框手动选择 level_data.gd。');
     });
 
     // ── Clear Current Tab ──────────────────────────────────────────────────────
@@ -766,7 +1336,11 @@
         const name = LEVEL_DEFS[activeStage].name;
         if (!confirm('确定要清空「' + name + '」（Stage ' + activeStage + '）的地图吗？其他关卡数据不受影响。')) return;
         allMapData[activeStage] = Array.from({ length: ROWS }, () => Array(COLS).fill(' '));
+        allPlatformData[activeStage] = [];
+        selectedPlatformIndex = 0;
         renderAll();
+        renderPlatforms();
+        updatePlatformPanel();
     });
 
     // ── Clear All Tabs ─────────────────────────────────────────────────────────
@@ -775,13 +1349,18 @@
         if (!confirm('确定要一键清空所有关卡地图吗？\n将清空：' + names + '。')) return;
         for (const stageKey of Object.keys(LEVEL_DEFS)) {
             allMapData[stageKey] = Array.from({ length: ROWS }, () => Array(COLS).fill(' '));
+            allPlatformData[stageKey] = [];
         }
+        selectedPlatformIndex = 0;
         renderAll();
+        renderPlatforms();
+        updatePlatformPanel();
     });
 
     // ── Init ───────────────────────────────────────────────────────────────────
     // Set initial background and render
     switchTab(1);
+    setPlatformMode('select');
 
 </script>
 </body>
