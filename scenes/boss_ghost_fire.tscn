@@ -1,0 +1,18 @@
+[gd_scene load_steps=3 format=3 uid="uid://bossghostfire01"]
+
+[ext_resource type="Script" path="res://scripts/boss_ghost_fire.gd" id="1_fire_script"]
+
+[sub_resource type="RectangleShape2D" id="GhostFireShape"]
+size = Vector2(58, 92)
+
+[node name="BossGhostFire" type="Area2D"]
+collision_layer = 4
+collision_mask = 10
+script = ExtResource("1_fire_script")
+
+[node name="Sprite" type="Sprite2D" parent="."]
+position = Vector2(0, -34)
+
+[node name="Collision" type="CollisionShape2D" parent="."]
+position = Vector2(0, -24)
+shape = SubResource("GhostFireShape")

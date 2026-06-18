@@ -4,6 +4,8 @@ const CONFIG_PATH := "user://char_tuning.cfg"
 # Browser builds keep user:// across GitHub Pages deployments. Increment this
 # whenever baked enemy calibration must replace previously saved Web values.
 const ENEMY_TUNING_VERSION := 1
+const FDK_MECHANISM_TUNING_VERSION := 4
+const FDK_HUD_TUNING_VERSION := 1
 
 signal tuning_changed
 
@@ -54,6 +56,41 @@ var pz_col_offset_x: float = 12.0
 var pz_col_offset_y: float = -34.0
 var pz_col_width: float = 62.0
 var pz_col_height: float = 118.0
+var fdk_sprite_scale: float = 0.42
+var fdk_sprite_offset_x: float = 0.0
+var fdk_sprite_offset_y: float = -166.0
+var fdk_col_offset_x: float = 18.0
+var fdk_col_offset_y: float = -108.0
+var fdk_col_width: float = 138.0
+var fdk_col_height: float = 204.0
+var fdk_col_scale: float = 1.0
+var fdk_mechanism_pos_x: float = 0.0
+var fdk_mechanism_pos_y: float = 0.0
+var fdk_mechanism_scale: float = 1.0
+var fdk_mechanism_pivot_x: float = 0.0
+var fdk_mechanism_pivot_y: float = 0.0
+var fdk_mechanism_rotation: float = 0.0
+# 滚动铁球（FatDemonKing Attack1 放出的会滚动的铁球）的可调参数：
+# - fdk_ball_scale       铁球美术资源缩放（视觉大小）
+# - fdk_ball_track_offset_y 铁球在三层平台上滚动时的美术 Y 偏移（修正铁球陷进/浮在平台的视觉）
+# - fdk_ball_spin_speed  铁球视觉自转速度系数（仅影响贴图旋转快慢，不影响位移）
+# - fdk_ball_roll_speed  铁球沿轨道的水平滚动移动速度（像素/秒）
+# - fdk_ball_rest_offset_x/y 平行(静止)状态下铁球相对机关平台的初始位置 XY 偏移
+var fdk_ball_scale: float = 0.55
+var fdk_ball_rest_offset_x: float = 0.0
+var fdk_ball_rest_offset_y: float = 0.0
+var fdk_ball_track_offset_y: float = 0.0
+var fdk_ball_spin_speed: float = 1.0
+var fdk_ball_roll_speed: float = 260.0
+# 炮弹（FatDemonKing Attack2 落下的炮弹）落在平台上消失/爆炸的高度微调与爆炸大小：
+# - shell_firecracker_scale  爆竹本体美术资源缩放
+# - shell_explode_offset_y     炮弹在平台站立面 Y 基础上的额外偏移（负值=更高处提前消失爆炸，正值=更靠下）；影响爆炸触发判定高度
+# - shell_explode_scale        Explode 爆炸序列帧美术资源的视觉缩放
+# - shell_explode_art_offset_y 爆炸美术序列帧相对炮弹爆炸位置的额外 Y 偏移（仅影响美术显示，不改变爆炸触发判定；负值=美术更高，正值=更低）
+var shell_firecracker_scale: float = 0.6
+var shell_explode_offset_y: float = 0.0
+var shell_explode_scale: float = 0.6
+var shell_explode_art_offset_y: float = 0.0
 # Boss（ChapterBoss 关卡的关底大怪）：当前只接入 sprite 缩放 + 位置偏移，
 # 没有碰撞调参（Boss 不参与玩家碰撞/吸入流程，加碰撞之后再补 col_* 字段）。
 # 默认 scale 0.4 是个先验估值；策划用 F1 调好后这里 baked 成新默认。
@@ -76,19 +113,66 @@ var boss_skull_spawn_offset_y: float = -166.0
 # FireSkull sprite 视觉缩放（飞行 + 喷出 ball 形态共用）。
 # PNG 原图较大，0.18 是策划先验估值；F1 面板可实时调整。
 var boss_skull_scale: float = 0.57
+# Boss Attack3 鬼火：这里的大小与位置是出现缩放动画结束后的 100% 状态。
+var boss_ghost_fire_scale: float = 0.58
+var boss_ghost_fire_offset_x: float = 0.0
+var boss_ghost_fire_offset_y: float = 24.0
 # 被发射敌人（团状翻滚 ball）的 sprite scale
 var ball_sprite_scale: float = 0.45
+# 地图上掉落元宝（被发射敌人撞击 3-5 个捕获物时掉落）的生成偏移、视觉大小和落地贴地高度。
+var drop_yuanbao_offset_x: float = 0.0
+var drop_yuanbao_offset_y: float = 0.0
+var drop_yuanbao_scale: float = 0.40
+var drop_yuanbao_fall_half_height: float = 35.0
 # 主菜单标题图位置与大小（StartPicture_title.png 在 1920×1080 画布上的中心坐标 + 缩放）
 var title_pos_x: float = 340.0
 var title_pos_y: float = 502.0
 var title_scale: float = 1.14
-# 关卡 HUD 铜钱统计：Coin.png 图标与像素数字在 CoinCounter 容器内的位置和缩放
+# 关卡 HUD 钟馗生命值（三颗红心）：Hearts 容器在 HeartCounter 内的位置和红心缩放
+var heart_pos_x: float = 0.0
+var heart_pos_y: float = 0.0
+var heart_scale: float = 1.0
+# 关卡 HUD 钟馗头像：AvatarFrame.png 在 HUD 根节点下的位置和缩放
+var avatar_frame_pos_x: float = 20.0
+var avatar_frame_pos_y: float = 94.0
+var avatar_frame_scale: float = 0.5
+# Chapter3 HUD 胖魔王头像与血条。头像位置是左上角，血条位置是矩形左上角。
+var fdk_avatar_frame_pos_x: float = 1772.0
+var fdk_avatar_frame_pos_y: float = 94.0
+var fdk_avatar_frame_scale: float = 0.5
+var fdk_health_bar_pos_x: float = 1668.0
+var fdk_health_bar_pos_y: float = 136.0
+var fdk_health_bar_width: float = 92.0
+var fdk_health_bar_height: float = 24.0
+# ChapterBoss HUD Boss 头像与血条。头像位置是左上角，血条位置是矩形左上角。
+var boss_avatar_frame_pos_x: float = 1772.0
+var boss_avatar_frame_pos_y: float = 76.0
+var boss_avatar_frame_scale: float = 0.125
+var boss_health_bar_pos_x: float = 1508.0
+var boss_health_bar_pos_y: float = 128.0
+var boss_health_bar_width: float = 232.0
+var boss_health_bar_height: float = 28.0
+# 关卡 HUD 铜钱/元宝统计：图标与像素数字在各自 Counter 容器内的位置和缩放
 var coin_icon_pos_x: float = 0.0
 var coin_icon_pos_y: float = 2.0
 var coin_icon_scale: float = 0.45
 var coin_digits_pos_x: float = 72.0
 var coin_digits_pos_y: float = 6.0
 var coin_digits_scale: float = 1.0
+var yuanbao_icon_pos_x: float = 0.0
+var yuanbao_icon_pos_y: float = 8.0
+var yuanbao_icon_scale: float = 0.45
+var yuanbao_digits_pos_x: float = 98.0
+var yuanbao_digits_pos_y: float = 6.0
+var yuanbao_digits_scale: float = 1.0
+# 关卡 HUD 游戏倒计时背景牌：以屏幕坐标作为中心点，缩放基于 Chapter_Countdown.png 原始尺寸。
+var countdown_bg_pos_x: float = 870.0
+var countdown_bg_pos_y: float = 52.0
+var countdown_bg_scale: float = 1.20
+# 关卡 HUD 游戏倒计时数字：TimeLabel 在 CountdownCounter 容器内的位置和整体 Control 缩放。
+var countdown_digits_pos_x: float = 0.0
+var countdown_digits_pos_y: float = 0.0
+var countdown_digits_scale: float = 1.0
 # 钟馗"吸入消失点"相对钟馗中心的偏移（朝向跟随钟馗朝向自动镜像 X）
 # 敌人被吸时朝这个点飞，到达 capture 触发瞬间敌人正好在此处消失（视觉上=飞进葫芦）
 var vanish_point_offset_x: float = 78.0
@@ -116,6 +200,13 @@ func load_config() -> void:
 	var enemy_tuning_is_current: bool = (
 		cfg.get_value("meta", "enemy_tuning_version", 0) == ENEMY_TUNING_VERSION
 	)
+	var fdk_mechanism_tuning_is_current: bool = (
+		cfg.get_value("meta", "fdk_mechanism_tuning_version", 0) == FDK_MECHANISM_TUNING_VERSION
+	)
+	var fdk_hud_tuning_is_current: bool = (
+		cfg.get_value("meta", "fdk_hud_tuning_version", 0) == FDK_HUD_TUNING_VERSION
+	)
+	var should_save_config: bool = not fdk_hud_tuning_is_current
 	sprite_scale         = cfg.get_value("char", "sprite_scale", sprite_scale)
 	sprite_offset_x      = cfg.get_value("char", "sprite_offset_x", sprite_offset_x)
 	sprite_offset_y      = cfg.get_value("char", "sprite_offset_y", sprite_offset_y)
@@ -131,15 +222,52 @@ func load_config() -> void:
 	inhale_fx_offset_x   = cfg.get_value("char", "inhale_fx_offset_x", inhale_fx_offset_x)
 	inhale_fx_offset_y   = cfg.get_value("char", "inhale_fx_offset_y", inhale_fx_offset_y)
 	ball_sprite_scale    = cfg.get_value("ball", "ball_sprite_scale", ball_sprite_scale)
+	drop_yuanbao_offset_x = cfg.get_value("pickup", "drop_yuanbao_offset_x", drop_yuanbao_offset_x)
+	drop_yuanbao_offset_y = cfg.get_value("pickup", "drop_yuanbao_offset_y", drop_yuanbao_offset_y)
+	drop_yuanbao_scale    = cfg.get_value("pickup", "drop_yuanbao_scale", drop_yuanbao_scale)
+	drop_yuanbao_fall_half_height = cfg.get_value("pickup", "drop_yuanbao_fall_half_height", drop_yuanbao_fall_half_height)
 	title_pos_x          = cfg.get_value("ui", "title_pos_x", title_pos_x)
 	title_pos_y          = cfg.get_value("ui", "title_pos_y", title_pos_y)
 	title_scale          = cfg.get_value("ui", "title_scale", title_scale)
+	heart_pos_x          = cfg.get_value("ui", "heart_pos_x", heart_pos_x)
+	heart_pos_y          = cfg.get_value("ui", "heart_pos_y", heart_pos_y)
+	heart_scale          = cfg.get_value("ui", "heart_scale", heart_scale)
+	avatar_frame_pos_x   = cfg.get_value("ui", "avatar_frame_pos_x", avatar_frame_pos_x)
+	avatar_frame_pos_y   = cfg.get_value("ui", "avatar_frame_pos_y", avatar_frame_pos_y)
+	avatar_frame_scale   = cfg.get_value("ui", "avatar_frame_scale", avatar_frame_scale)
+	if fdk_hud_tuning_is_current:
+		fdk_avatar_frame_pos_x = cfg.get_value("ui", "fdk_avatar_frame_pos_x", fdk_avatar_frame_pos_x)
+		fdk_avatar_frame_pos_y = cfg.get_value("ui", "fdk_avatar_frame_pos_y", fdk_avatar_frame_pos_y)
+		fdk_avatar_frame_scale = cfg.get_value("ui", "fdk_avatar_frame_scale", fdk_avatar_frame_scale)
+		fdk_health_bar_pos_x   = cfg.get_value("ui", "fdk_health_bar_pos_x", fdk_health_bar_pos_x)
+		fdk_health_bar_pos_y   = cfg.get_value("ui", "fdk_health_bar_pos_y", fdk_health_bar_pos_y)
+		fdk_health_bar_width   = cfg.get_value("ui", "fdk_health_bar_width", fdk_health_bar_width)
+		fdk_health_bar_height  = cfg.get_value("ui", "fdk_health_bar_height", fdk_health_bar_height)
+	boss_avatar_frame_pos_x = cfg.get_value("ui", "boss_avatar_frame_pos_x", boss_avatar_frame_pos_x)
+	boss_avatar_frame_pos_y = cfg.get_value("ui", "boss_avatar_frame_pos_y", boss_avatar_frame_pos_y)
+	boss_avatar_frame_scale = cfg.get_value("ui", "boss_avatar_frame_scale", boss_avatar_frame_scale)
+	boss_health_bar_pos_x   = cfg.get_value("ui", "boss_health_bar_pos_x", boss_health_bar_pos_x)
+	boss_health_bar_pos_y   = cfg.get_value("ui", "boss_health_bar_pos_y", boss_health_bar_pos_y)
+	boss_health_bar_width   = cfg.get_value("ui", "boss_health_bar_width", boss_health_bar_width)
+	boss_health_bar_height  = cfg.get_value("ui", "boss_health_bar_height", boss_health_bar_height)
 	coin_icon_pos_x      = cfg.get_value("ui", "coin_icon_pos_x", coin_icon_pos_x)
 	coin_icon_pos_y      = cfg.get_value("ui", "coin_icon_pos_y", coin_icon_pos_y)
 	coin_icon_scale      = cfg.get_value("ui", "coin_icon_scale", coin_icon_scale)
 	coin_digits_pos_x    = cfg.get_value("ui", "coin_digits_pos_x", coin_digits_pos_x)
 	coin_digits_pos_y    = cfg.get_value("ui", "coin_digits_pos_y", coin_digits_pos_y)
 	coin_digits_scale    = cfg.get_value("ui", "coin_digits_scale", coin_digits_scale)
+	yuanbao_icon_pos_x   = cfg.get_value("ui", "yuanbao_icon_pos_x", yuanbao_icon_pos_x)
+	yuanbao_icon_pos_y   = cfg.get_value("ui", "yuanbao_icon_pos_y", yuanbao_icon_pos_y)
+	yuanbao_icon_scale   = cfg.get_value("ui", "yuanbao_icon_scale", yuanbao_icon_scale)
+	yuanbao_digits_pos_x = cfg.get_value("ui", "yuanbao_digits_pos_x", yuanbao_digits_pos_x)
+	yuanbao_digits_pos_y = cfg.get_value("ui", "yuanbao_digits_pos_y", yuanbao_digits_pos_y)
+	yuanbao_digits_scale = cfg.get_value("ui", "yuanbao_digits_scale", yuanbao_digits_scale)
+	countdown_bg_pos_x   = cfg.get_value("ui", "countdown_bg_pos_x", countdown_bg_pos_x)
+	countdown_bg_pos_y   = cfg.get_value("ui", "countdown_bg_pos_y", countdown_bg_pos_y)
+	countdown_bg_scale   = cfg.get_value("ui", "countdown_bg_scale", countdown_bg_scale)
+	countdown_digits_pos_x = cfg.get_value("ui", "countdown_digits_pos_x", countdown_digits_pos_x)
+	countdown_digits_pos_y = cfg.get_value("ui", "countdown_digits_pos_y", countdown_digits_pos_y)
+	countdown_digits_scale = cfg.get_value("ui", "countdown_digits_scale", countdown_digits_scale)
 	vanish_point_offset_x = cfg.get_value("char", "vanish_point_offset_x", vanish_point_offset_x)
 	vanish_point_offset_y = cfg.get_value("char", "vanish_point_offset_y", vanish_point_offset_y)
 	if enemy_tuning_is_current:
@@ -168,6 +296,31 @@ func load_config() -> void:
 		pz_col_offset_y      = cfg.get_value("enemy", "pz_col_offset_y", pz_col_offset_y)
 		pz_col_width         = cfg.get_value("enemy", "pz_col_width", pz_col_width)
 		pz_col_height        = cfg.get_value("enemy", "pz_col_height", pz_col_height)
+		fdk_sprite_scale     = cfg.get_value("enemy", "fdk_sprite_scale", fdk_sprite_scale)
+		fdk_sprite_offset_x  = cfg.get_value("enemy", "fdk_sprite_offset_x", fdk_sprite_offset_x)
+		fdk_sprite_offset_y  = cfg.get_value("enemy", "fdk_sprite_offset_y", fdk_sprite_offset_y)
+		fdk_col_offset_x     = cfg.get_value("enemy", "fdk_col_offset_x", fdk_col_offset_x)
+		fdk_col_offset_y     = cfg.get_value("enemy", "fdk_col_offset_y", fdk_col_offset_y)
+		fdk_col_width        = cfg.get_value("enemy", "fdk_col_width", fdk_col_width)
+		fdk_col_height       = cfg.get_value("enemy", "fdk_col_height", fdk_col_height)
+		fdk_col_scale        = cfg.get_value("enemy", "fdk_col_scale", fdk_col_scale)
+		if fdk_mechanism_tuning_is_current:
+			fdk_mechanism_pos_x     = cfg.get_value("enemy", "fdk_mechanism_pos_x", fdk_mechanism_pos_x)
+			fdk_mechanism_pos_y     = cfg.get_value("enemy", "fdk_mechanism_pos_y", fdk_mechanism_pos_y)
+			fdk_mechanism_scale     = cfg.get_value("enemy", "fdk_mechanism_scale", fdk_mechanism_scale)
+			fdk_mechanism_pivot_x   = cfg.get_value("enemy", "fdk_mechanism_pivot_x", fdk_mechanism_pivot_x)
+			fdk_mechanism_pivot_y   = cfg.get_value("enemy", "fdk_mechanism_pivot_y", fdk_mechanism_pivot_y)
+			fdk_mechanism_rotation  = cfg.get_value("enemy", "fdk_mechanism_rotation", fdk_mechanism_rotation)
+			fdk_ball_scale          = cfg.get_value("enemy", "fdk_ball_scale", fdk_ball_scale)
+			fdk_ball_rest_offset_x  = cfg.get_value("enemy", "fdk_ball_rest_offset_x", fdk_ball_rest_offset_x)
+			fdk_ball_rest_offset_y  = cfg.get_value("enemy", "fdk_ball_rest_offset_y", fdk_ball_rest_offset_y)
+			fdk_ball_track_offset_y = cfg.get_value("enemy", "fdk_ball_track_offset_y", fdk_ball_track_offset_y)
+			fdk_ball_spin_speed     = cfg.get_value("enemy", "fdk_ball_spin_speed", fdk_ball_spin_speed)
+			fdk_ball_roll_speed     = cfg.get_value("enemy", "fdk_ball_roll_speed", fdk_ball_roll_speed)
+			shell_firecracker_scale = cfg.get_value("enemy", "shell_firecracker_scale", shell_firecracker_scale)
+			shell_explode_offset_y  = cfg.get_value("enemy", "shell_explode_offset_y", shell_explode_offset_y)
+			shell_explode_scale     = cfg.get_value("enemy", "shell_explode_scale", shell_explode_scale)
+			shell_explode_art_offset_y = cfg.get_value("enemy", "shell_explode_art_offset_y", shell_explode_art_offset_y)
 		boss_sprite_scale    = cfg.get_value("enemy", "boss_sprite_scale", boss_sprite_scale)
 		boss_sprite_offset_x = cfg.get_value("enemy", "boss_sprite_offset_x", boss_sprite_offset_x)
 		boss_sprite_offset_y = cfg.get_value("enemy", "boss_sprite_offset_y", boss_sprite_offset_y)
@@ -179,6 +332,9 @@ func load_config() -> void:
 		boss_skull_spawn_offset_x = cfg.get_value("enemy", "boss_skull_spawn_offset_x", boss_skull_spawn_offset_x)
 		boss_skull_spawn_offset_y = cfg.get_value("enemy", "boss_skull_spawn_offset_y", boss_skull_spawn_offset_y)
 		boss_skull_scale          = cfg.get_value("enemy", "boss_skull_scale", boss_skull_scale)
+		boss_ghost_fire_scale     = cfg.get_value("enemy", "boss_ghost_fire_scale", boss_ghost_fire_scale)
+		boss_ghost_fire_offset_x  = cfg.get_value("enemy", "boss_ghost_fire_offset_x", boss_ghost_fire_offset_x)
+		boss_ghost_fire_offset_y  = cfg.get_value("enemy", "boss_ghost_fire_offset_y", boss_ghost_fire_offset_y)
 		mh_hammer_scale     = cfg.get_value("enemy", "mh_hammer_scale", mh_hammer_scale)
 		mh_hammer_offset_x  = cfg.get_value("enemy", "mh_hammer_offset_x", mh_hammer_offset_x)
 		mh_hammer_offset_y  = cfg.get_value("enemy", "mh_hammer_offset_y", mh_hammer_offset_y)
@@ -186,11 +342,15 @@ func load_config() -> void:
 	else:
 		# Keep unrelated personal settings, but rewrite stale enemy calibration
 		# so the Web build does not reapply old collision boxes on every launch.
+		should_save_config = true
+	if should_save_config:
 		save_config()
 
 func save_config() -> void:
 	var cfg := ConfigFile.new()
 	cfg.set_value("meta", "enemy_tuning_version", ENEMY_TUNING_VERSION)
+	cfg.set_value("meta", "fdk_mechanism_tuning_version", FDK_MECHANISM_TUNING_VERSION)
+	cfg.set_value("meta", "fdk_hud_tuning_version", FDK_HUD_TUNING_VERSION)
 	cfg.set_value("char", "sprite_scale", sprite_scale)
 	cfg.set_value("char", "sprite_offset_x", sprite_offset_x)
 	cfg.set_value("char", "sprite_offset_y", sprite_offset_y)
@@ -230,6 +390,30 @@ func save_config() -> void:
 	cfg.set_value("enemy", "pz_col_offset_y", pz_col_offset_y)
 	cfg.set_value("enemy", "pz_col_width", pz_col_width)
 	cfg.set_value("enemy", "pz_col_height", pz_col_height)
+	cfg.set_value("enemy", "fdk_sprite_scale", fdk_sprite_scale)
+	cfg.set_value("enemy", "fdk_sprite_offset_x", fdk_sprite_offset_x)
+	cfg.set_value("enemy", "fdk_sprite_offset_y", fdk_sprite_offset_y)
+	cfg.set_value("enemy", "fdk_col_offset_x", fdk_col_offset_x)
+	cfg.set_value("enemy", "fdk_col_offset_y", fdk_col_offset_y)
+	cfg.set_value("enemy", "fdk_col_width", fdk_col_width)
+	cfg.set_value("enemy", "fdk_col_height", fdk_col_height)
+	cfg.set_value("enemy", "fdk_col_scale", fdk_col_scale)
+	cfg.set_value("enemy", "fdk_mechanism_pos_x", fdk_mechanism_pos_x)
+	cfg.set_value("enemy", "fdk_mechanism_pos_y", fdk_mechanism_pos_y)
+	cfg.set_value("enemy", "fdk_mechanism_scale", fdk_mechanism_scale)
+	cfg.set_value("enemy", "fdk_mechanism_pivot_x", fdk_mechanism_pivot_x)
+	cfg.set_value("enemy", "fdk_mechanism_pivot_y", fdk_mechanism_pivot_y)
+	cfg.set_value("enemy", "fdk_mechanism_rotation", fdk_mechanism_rotation)
+	cfg.set_value("enemy", "fdk_ball_scale", fdk_ball_scale)
+	cfg.set_value("enemy", "fdk_ball_rest_offset_x", fdk_ball_rest_offset_x)
+	cfg.set_value("enemy", "fdk_ball_rest_offset_y", fdk_ball_rest_offset_y)
+	cfg.set_value("enemy", "fdk_ball_track_offset_y", fdk_ball_track_offset_y)
+	cfg.set_value("enemy", "fdk_ball_spin_speed", fdk_ball_spin_speed)
+	cfg.set_value("enemy", "fdk_ball_roll_speed", fdk_ball_roll_speed)
+	cfg.set_value("enemy", "shell_firecracker_scale", shell_firecracker_scale)
+	cfg.set_value("enemy", "shell_explode_offset_y", shell_explode_offset_y)
+	cfg.set_value("enemy", "shell_explode_scale", shell_explode_scale)
+	cfg.set_value("enemy", "shell_explode_art_offset_y", shell_explode_art_offset_y)
 	cfg.set_value("enemy", "boss_sprite_scale", boss_sprite_scale)
 	cfg.set_value("enemy", "boss_sprite_offset_x", boss_sprite_offset_x)
 	cfg.set_value("enemy", "boss_sprite_offset_y", boss_sprite_offset_y)
@@ -241,16 +425,55 @@ func save_config() -> void:
 	cfg.set_value("enemy", "boss_skull_spawn_offset_x", boss_skull_spawn_offset_x)
 	cfg.set_value("enemy", "boss_skull_spawn_offset_y", boss_skull_spawn_offset_y)
 	cfg.set_value("enemy", "boss_skull_scale", boss_skull_scale)
+	cfg.set_value("enemy", "boss_ghost_fire_scale", boss_ghost_fire_scale)
+	cfg.set_value("enemy", "boss_ghost_fire_offset_x", boss_ghost_fire_offset_x)
+	cfg.set_value("enemy", "boss_ghost_fire_offset_y", boss_ghost_fire_offset_y)
 	cfg.set_value("ball", "ball_sprite_scale", ball_sprite_scale)
+	cfg.set_value("pickup", "drop_yuanbao_offset_x", drop_yuanbao_offset_x)
+	cfg.set_value("pickup", "drop_yuanbao_offset_y", drop_yuanbao_offset_y)
+	cfg.set_value("pickup", "drop_yuanbao_scale", drop_yuanbao_scale)
+	cfg.set_value("pickup", "drop_yuanbao_fall_half_height", drop_yuanbao_fall_half_height)
 	cfg.set_value("ui", "title_pos_x", title_pos_x)
 	cfg.set_value("ui", "title_pos_y", title_pos_y)
 	cfg.set_value("ui", "title_scale", title_scale)
+	cfg.set_value("ui", "heart_pos_x", heart_pos_x)
+	cfg.set_value("ui", "heart_pos_y", heart_pos_y)
+	cfg.set_value("ui", "heart_scale", heart_scale)
+	cfg.set_value("ui", "avatar_frame_pos_x", avatar_frame_pos_x)
+	cfg.set_value("ui", "avatar_frame_pos_y", avatar_frame_pos_y)
+	cfg.set_value("ui", "avatar_frame_scale", avatar_frame_scale)
+	cfg.set_value("ui", "fdk_avatar_frame_pos_x", fdk_avatar_frame_pos_x)
+	cfg.set_value("ui", "fdk_avatar_frame_pos_y", fdk_avatar_frame_pos_y)
+	cfg.set_value("ui", "fdk_avatar_frame_scale", fdk_avatar_frame_scale)
+	cfg.set_value("ui", "fdk_health_bar_pos_x", fdk_health_bar_pos_x)
+	cfg.set_value("ui", "fdk_health_bar_pos_y", fdk_health_bar_pos_y)
+	cfg.set_value("ui", "fdk_health_bar_width", fdk_health_bar_width)
+	cfg.set_value("ui", "fdk_health_bar_height", fdk_health_bar_height)
+	cfg.set_value("ui", "boss_avatar_frame_pos_x", boss_avatar_frame_pos_x)
+	cfg.set_value("ui", "boss_avatar_frame_pos_y", boss_avatar_frame_pos_y)
+	cfg.set_value("ui", "boss_avatar_frame_scale", boss_avatar_frame_scale)
+	cfg.set_value("ui", "boss_health_bar_pos_x", boss_health_bar_pos_x)
+	cfg.set_value("ui", "boss_health_bar_pos_y", boss_health_bar_pos_y)
+	cfg.set_value("ui", "boss_health_bar_width", boss_health_bar_width)
+	cfg.set_value("ui", "boss_health_bar_height", boss_health_bar_height)
 	cfg.set_value("ui", "coin_icon_pos_x", coin_icon_pos_x)
 	cfg.set_value("ui", "coin_icon_pos_y", coin_icon_pos_y)
 	cfg.set_value("ui", "coin_icon_scale", coin_icon_scale)
 	cfg.set_value("ui", "coin_digits_pos_x", coin_digits_pos_x)
 	cfg.set_value("ui", "coin_digits_pos_y", coin_digits_pos_y)
 	cfg.set_value("ui", "coin_digits_scale", coin_digits_scale)
+	cfg.set_value("ui", "yuanbao_icon_pos_x", yuanbao_icon_pos_x)
+	cfg.set_value("ui", "yuanbao_icon_pos_y", yuanbao_icon_pos_y)
+	cfg.set_value("ui", "yuanbao_icon_scale", yuanbao_icon_scale)
+	cfg.set_value("ui", "yuanbao_digits_pos_x", yuanbao_digits_pos_x)
+	cfg.set_value("ui", "yuanbao_digits_pos_y", yuanbao_digits_pos_y)
+	cfg.set_value("ui", "yuanbao_digits_scale", yuanbao_digits_scale)
+	cfg.set_value("ui", "countdown_bg_pos_x", countdown_bg_pos_x)
+	cfg.set_value("ui", "countdown_bg_pos_y", countdown_bg_pos_y)
+	cfg.set_value("ui", "countdown_bg_scale", countdown_bg_scale)
+	cfg.set_value("ui", "countdown_digits_pos_x", countdown_digits_pos_x)
+	cfg.set_value("ui", "countdown_digits_pos_y", countdown_digits_pos_y)
+	cfg.set_value("ui", "countdown_digits_scale", countdown_digits_scale)
 	cfg.set_value("char", "vanish_point_offset_x", vanish_point_offset_x)
 	cfg.set_value("char", "vanish_point_offset_y", vanish_point_offset_y)
 	cfg.set_value("enemy", "mh_hammer_scale", mh_hammer_scale)

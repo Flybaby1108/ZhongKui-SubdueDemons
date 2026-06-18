@@ -19,7 +19,7 @@ shape = SubResource("BallShape")
 
 [node name="HitArea" type="Area2D" parent="."]
 collision_layer = 0
-collision_mask = 4
+collision_mask = 20
 
 [node name="HitShape" type="CollisionShape2D" parent="HitArea"]
 shape = SubResource("BallShape")

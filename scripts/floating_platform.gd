@@ -248,7 +248,7 @@ func _get_collision_cell_bounds() -> Rect2:
 	return Rect2(min_x, min_y, max_x - min_x + 1, max_y - min_y + 1)
 
 func _damage_players_on_spikes() -> void:
-	if not _spikes_active or _damage_area == null:
+	if not _spikes_active or _damage_area == null or not _damage_area.monitoring:
 		return
 	var current_frame := Engine.get_physics_frames()
 	if current_frame - _damage_frame < SPIKE_DAMAGE_COOLDOWN_FRAMES:

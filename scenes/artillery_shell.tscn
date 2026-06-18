@@ -1,0 +1,17 @@
+[gd_scene load_steps=3 format=3 uid="uid://artyshell0001"]
+
+[ext_resource type="Script" path="res://scripts/artillery_shell.gd" id="1_script"]
+
+[sub_resource type="RectangleShape2D" id="ShellShape"]
+size = Vector2(50, 80)
+
+[node name="ArtilleryShell" type="Area2D"]
+collision_layer = 0
+collision_mask = 2
+script = ExtResource("1_script")
+z_index = 60
+
+[node name="Sprite" type="Sprite2D" parent="."]
+
+[node name="Collision" type="CollisionShape2D" parent="."]
+shape = SubResource("ShellShape")

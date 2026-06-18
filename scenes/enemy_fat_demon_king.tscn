@@ -1,0 +1,36 @@
+[gd_scene load_steps=4 format=3 uid="uid://enemy_fdk000001"]
+
+[ext_resource type="Script" uid="uid://cl0ccenhkey6v" path="res://scripts/enemy.gd" id="1_enemy"]
+[ext_resource type="Texture2D" path="res://assets/sprites/Enemy/FatDemonKing/FatDemonKing_idle/FatDemonKing_idle_01.png" id="2_tex"]
+
+[sub_resource type="RectangleShape2D" id="FDKShape"]
+size = Vector2(138, 204)
+
+[node name="EnemyFatDemonKing" type="CharacterBody2D"]
+collision_layer = 4
+collision_mask = 33
+script = ExtResource("1_enemy")
+enemy_type = 4
+default_facing_right = true
+
+[node name="Sprite" type="Sprite2D" parent="."]
+scale = Vector2(0.42, 0.42)
+texture = ExtResource("2_tex")
+
+[node name="Collision" type="CollisionShape2D" parent="."]
+position = Vector2(18, -108)
+shape = SubResource("FDKShape")
+
+[node name="AnimTimer" type="Timer" parent="."]
+wait_time = 0.1
+autostart = false
+
+[node name="GroundCheck" type="RayCast2D" parent="."]
+position = Vector2(-40, 0)
+target_position = Vector2(0, 80)
+collision_mask = 1
+
+[node name="WallCheck" type="RayCast2D" parent="."]
+position = Vector2(0, 0)
+target_position = Vector2(-60, 0)
+collision_mask = 33

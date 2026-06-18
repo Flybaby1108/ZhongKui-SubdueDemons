@@ -70,6 +70,7 @@ var _is_frozen: bool = false       # 蓄力期：完全冻结在原地
 var _flight_t: float = 0.0
 var _flight_start: Vector2 = Vector2.ZERO
 var _flight_vanish: Vector2 = Vector2.ZERO
+var _free_queued: bool = false
 # 进入飞向葫芦阶段时锁定的 sprite 缩放基准（取自 CharTuning.boss_skull_scale），
 # 用于收缩公式 scale × (1-p)。锁定后飞行中 F1 改 scale 不会让飞行动画跳变。
 var _flight_base_scale: float = SPRITE_SCALE_FALLBACK
@@ -181,7 +182,7 @@ func _physics_process(delta: float) -> void:
 	# 5) 飞出世界边界销毁
 	if global_position.x < WORLD_LEFT or global_position.x > WORLD_RIGHT \
 			or global_position.y < WORLD_TOP or global_position.y > WORLD_BOTTOM:
-		queue_free()
+		_queue_free_deferred()
 
 func _tick_anim(delta: float) -> void:
 	if _frames.size() <= 1:
@@ -234,3 +235,9 @@ func reset_suction_shrink() -> void:
 		sprite.visible = true
 		var s: float = CharTuning.boss_skull_scale
 		sprite.scale = Vector2(s, s)
+
+func _queue_free_deferred() -> void:
+	if _free_queued:
+		return
+	_free_queued = true
+	call_deferred("queue_free")

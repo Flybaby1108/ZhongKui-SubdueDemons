@@ -7,6 +7,8 @@ const VALUE_WIDTH := 120.0
 var _rows: Array[Dictionary] = []
 var _panel: PanelContainer
 var _vbox: VBoxContainer
+var _dragging_panel: bool = false
+var _panel_drag_offset: Vector2 = Vector2.ZERO
 
 func _ready() -> void:
 	layer = 100
@@ -19,6 +21,7 @@ func _input(event: InputEvent) -> void:
 	if event is InputEventKey and event.pressed and not event.echo:
 		if event.keycode == KEY_F1:
 			visible = not visible
+			_dragging_panel = false
 			get_tree().paused = visible
 			# Refresh debug draw on player
 			var player = get_tree().get_first_node_in_group("player")
@@ -26,13 +29,30 @@ func _input(event: InputEvent) -> void:
 				player.queue_redraw()
 			for marker in get_tree().get_nodes_in_group("vanish_marker"):
 				marker.queue_redraw()
+			for marker in get_tree().get_nodes_in_group("shell_explode_marker"):
+				marker.queue_redraw()
 			# Refresh debug draw on Boss（被攻击范围紫色矩形随面板可见性显隐）
 			for boss in get_tree().get_nodes_in_group("boss"):
 				boss.queue_redraw()
+			for level in get_tree().get_nodes_in_group("level"):
+				if level.has_method("refresh_chapter3_mechanism_preview_debug"):
+					level.refresh_chapter3_mechanism_preview_debug()
 			get_viewport().set_input_as_handled()
 		elif event.keycode == KEY_F2 and visible:
 			_reset_defaults()
 			get_viewport().set_input_as_handled()
+	elif visible and event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
+		if event.pressed:
+			if _can_start_panel_drag():
+				_dragging_panel = true
+				_panel_drag_offset = _panel.get_global_mouse_position() - _panel.global_position
+				get_viewport().set_input_as_handled()
+		elif _dragging_panel:
+			_dragging_panel = false
+			get_viewport().set_input_as_handled()
+	elif visible and event is InputEventMouseMotion and _dragging_panel:
+		_move_panel_to(_panel.get_global_mouse_position() - _panel_drag_offset)
+		get_viewport().set_input_as_handled()
 
 func _build_ui() -> void:
 	_panel = PanelContainer.new()
@@ -188,6 +208,45 @@ func _build_ui() -> void:
 	_add_row("PZ Col Offset Y",   "pz_col_offset_y",   -200,  200, 1.0)
 	_vbox.add_child(HSeparator.new())
 
+	var title_fdk := Label.new()
+	title_fdk.text = "▼ 敌人设置 (FatDemonKing 胖魔王)"
+	title_fdk.add_theme_font_size_override("font_size", 22)
+	title_fdk.add_theme_color_override("font_color", Color(0.7, 0.35, 0.15, 1))
+	_vbox.add_child(title_fdk)
+	_add_row("FDK Sprite Scale",   "fdk_sprite_scale",    0.05, 1.0,  0.01)
+	_add_row("FDK Sprite Offset X","fdk_sprite_offset_x",-300,  300, 1.0)
+	_add_row("FDK Sprite Offset Y","fdk_sprite_offset_y",-300,  200, 1.0)
+	_vbox.add_child(HSeparator.new())
+	_add_row("FDK Col Scale",      "fdk_col_scale",      0.1,   3.0, 0.01)
+	_add_row("FDK Col Width",      "fdk_col_width",       10,   500, 2.0)
+	_add_row("FDK Col Height",     "fdk_col_height",      10,   500, 2.0)
+	_add_row("FDK Col Offset X",   "fdk_col_offset_x",   -250,  250, 1.0)
+	_add_row("FDK Col Offset Y",   "fdk_col_offset_y",   -300,  200, 1.0)
+	_vbox.add_child(HSeparator.new())
+	_add_row("Mechanism Pos X",    "fdk_mechanism_pos_x",   -600,  600, 1.0)
+	_add_row("Mechanism Pos Y",    "fdk_mechanism_pos_y",   -600,  600, 1.0)
+	_add_row("Mechanism Scale",    "fdk_mechanism_scale",   0.05,  3.0, 0.01)
+	_add_row("Mechanism Pivot X",  "fdk_mechanism_pivot_x", -600,  600, 1.0)
+	_add_row("Mechanism Pivot Y",  "fdk_mechanism_pivot_y", -600,  600, 1.0)
+	_add_row("Mechanism Rotation", "fdk_mechanism_rotation", -180, 180, 1.0)
+	_vbox.add_child(HSeparator.new())
+	# 滚动铁球：美术大小 / 平台上滚动时的 Y 位置 / 视觉自转速度 / 移动滚动速度
+	_add_row("铁球美术大小",       "fdk_ball_scale",          0.05,  2.0,  0.01)
+	_add_row("铁球初始位置 X",     "fdk_ball_rest_offset_x",  -400,  400,  1.0)
+	_add_row("铁球初始位置 Y",     "fdk_ball_rest_offset_y",  -400,  400,  1.0)
+	_add_row("铁球滚动 Y 位置",    "fdk_ball_track_offset_y", -200,  200,  1.0)
+	_add_row("铁球转速 (自转)",    "fdk_ball_spin_speed",      0.0,  5.0,  0.05)
+	_add_row("铁球滚动速度",       "fdk_ball_roll_speed",       20,  900,  5.0)
+	_vbox.add_child(HSeparator.new())
+	# 炮弹（Attack2 落下）：落在平台上消失/爆炸的高度微调 + 爆炸大小
+	_add_row("炮竹美术大小",        "shell_firecracker_scale", 0.05, 3.0, 0.01)
+	# 爆炸高度 Y 偏移：负值=更高处提前消失爆炸，正值=更靠近/穿过平台
+	_add_row("炮弹爆炸高度 Y 偏移", "shell_explode_offset_y", -300, 300, 1.0)
+	_add_row("Explode 爆炸美术大小", "shell_explode_scale",    0.05, 3.0, 0.01)
+	# 爆炸美术高度 Y 偏移：仅移动爆炸序列帧的显示位置，不改变爆炸触发判定（负值=美术更高，正值=更低）
+	_add_row("炮弹爆炸美术高度 Y 偏移", "shell_explode_art_offset_y", -300, 300, 1.0)
+	_vbox.add_child(HSeparator.new())
+
 	# Boss（关底大怪）：当前只调 sprite 缩放 + 位置偏移。Boss 在游戏里钉死在
 	# 编辑器画的 BBBBBB 方块顶部中心，用这三个滑块把脚下/姿态校到合适。
 	# scale 范围给到 2.0，因为 Boss 通常显著大于普通敌人；offset 范围 ±400
@@ -211,6 +270,9 @@ func _build_ui() -> void:
 	_add_row("Boss FireSkull Scale",    "boss_skull_scale",      0.02, 1.0,  0.01)
 	_add_row("Boss FireSkull Offset X", "boss_skull_spawn_offset_x", -400, 400, 1.0)
 	_add_row("Boss FireSkull Offset Y", "boss_skull_spawn_offset_y", -400, 400, 1.0)
+	_add_row("Boss 鬼火大小",          "boss_ghost_fire_scale",    0.02, 2.0,  0.01)
+	_add_row("Boss 鬼火位置 X",        "boss_ghost_fire_offset_x", -400, 400, 1.0)
+	_add_row("Boss 鬼火位置 Y",        "boss_ghost_fire_offset_y", -400, 400, 1.0)
 	_vbox.add_child(HSeparator.new())
 
 	var title_ball := Label.new()
@@ -219,6 +281,17 @@ func _build_ui() -> void:
 	title_ball.add_theme_color_override("font_color", Color(0.9, 0.7, 0.3, 1))
 	_vbox.add_child(title_ball)
 	_add_row("Ball Sprite Scale", "ball_sprite_scale",  0.05, 1.0,  0.01)
+	_vbox.add_child(HSeparator.new())
+
+	var title_drop_yuanbao := Label.new()
+	title_drop_yuanbao.text = "▼ 地图掉落元宝"
+	title_drop_yuanbao.add_theme_font_size_override("font_size", 22)
+	title_drop_yuanbao.add_theme_color_override("font_color", Color(1, 0.8, 0.2, 1))
+	_vbox.add_child(title_drop_yuanbao)
+	_add_row("掉落元宝位置 X", "drop_yuanbao_offset_x", -400, 400, 1.0)
+	_add_row("掉落元宝位置 Y", "drop_yuanbao_offset_y", -400, 400, 1.0)
+	_add_row("掉落元宝大小", "drop_yuanbao_scale", 0.05, 2.0, 0.01)
+	_add_row("掉落元宝贴地高度", "drop_yuanbao_fall_half_height", 0, 120, 1.0)
 	_vbox.add_child(HSeparator.new())
 
 	var title_main := Label.new()
@@ -231,17 +304,84 @@ func _build_ui() -> void:
 	_add_row("Title Scale",       "title_scale",     0.1, 3.0,  0.02)
 	_vbox.add_child(HSeparator.new())
 
+	var title_avatar_hud := Label.new()
+	title_avatar_hud.text = "▼ 关卡 HUD 钟馗生命/头像"
+	title_avatar_hud.add_theme_font_size_override("font_size", 22)
+	title_avatar_hud.add_theme_color_override("font_color", Color(0.45, 0.9, 0.9, 1))
+	_vbox.add_child(title_avatar_hud)
+	_add_row("红心位置 X", "heart_pos_x", -400, 1920, 1.0)
+	_add_row("红心位置 Y", "heart_pos_y", -200, 1080, 1.0)
+	_add_row("红心大小", "heart_scale", 0.1, 4.0, 0.01)
+	_add_row("头像位置 X", "avatar_frame_pos_x", 0, 1920, 1.0)
+	_add_row("头像位置 Y", "avatar_frame_pos_y", 0, 1080, 1.0)
+	_add_row("头像大小", "avatar_frame_scale", 0.05, 3.0, 0.01)
+	_vbox.add_child(HSeparator.new())
+
+	var title_fdk_hud := Label.new()
+	title_fdk_hud.text = "▼ Chapter3 HUD 胖魔王头像/血条"
+	title_fdk_hud.add_theme_font_size_override("font_size", 22)
+	title_fdk_hud.add_theme_color_override("font_color", Color(1.0, 0.45, 0.25, 1))
+	_vbox.add_child(title_fdk_hud)
+	_add_row("胖魔王头像位置 X", "fdk_avatar_frame_pos_x", 0, 1920, 1.0)
+	_add_row("胖魔王头像位置 Y", "fdk_avatar_frame_pos_y", 0, 1080, 1.0)
+	_add_row("胖魔王头像大小", "fdk_avatar_frame_scale", 0.05, 3.0, 0.01)
+	_add_row("胖魔王血条位置 X", "fdk_health_bar_pos_x", 0, 1920, 1.0)
+	_add_row("胖魔王血条位置 Y", "fdk_health_bar_pos_y", 0, 1080, 1.0)
+	_add_row("胖魔王血条宽度", "fdk_health_bar_width", 10, 1000, 1.0)
+	_add_row("胖魔王血条高度", "fdk_health_bar_height", 4, 200, 1.0)
+	_vbox.add_child(HSeparator.new())
+
+	var title_boss_hud := Label.new()
+	title_boss_hud.text = "▼ ChapterBoss HUD Boss头像/血条"
+	title_boss_hud.add_theme_font_size_override("font_size", 22)
+	title_boss_hud.add_theme_color_override("font_color", Color(1.0, 0.35, 0.35, 1))
+	_vbox.add_child(title_boss_hud)
+	_add_row("Boss头像位置 X", "boss_avatar_frame_pos_x", 0, 1920, 1.0)
+	_add_row("Boss头像位置 Y", "boss_avatar_frame_pos_y", 0, 1080, 1.0)
+	_add_row("Boss头像大小", "boss_avatar_frame_scale", 0.02, 1.0, 0.005)
+	_add_row("Boss血条位置 X", "boss_health_bar_pos_x", 0, 1920, 1.0)
+	_add_row("Boss血条位置 Y", "boss_health_bar_pos_y", 0, 1080, 1.0)
+	_add_row("Boss血条宽度", "boss_health_bar_width", 10, 1200, 1.0)
+	_add_row("Boss血条高度", "boss_health_bar_height", 4, 200, 1.0)
+	_vbox.add_child(HSeparator.new())
+
 	var title_coin_hud := Label.new()
 	title_coin_hud.text = "▼ 关卡 HUD 铜钱统计"
 	title_coin_hud.add_theme_font_size_override("font_size", 22)
 	title_coin_hud.add_theme_color_override("font_color", Color(1, 0.75, 0.25, 1))
 	_vbox.add_child(title_coin_hud)
-	_add_row("铜钱图标位置 X", "coin_icon_pos_x", -100, 400, 1.0)
+	_add_row("铜钱图标位置 X", "coin_icon_pos_x", -400, 400, 1.0)
 	_add_row("铜钱图标位置 Y", "coin_icon_pos_y", -100, 150, 1.0)
 	_add_row("铜钱图标大小", "coin_icon_scale", 0.1, 2.0, 0.01)
-	_add_row("铜钱数字位置 X", "coin_digits_pos_x", -100, 500, 1.0)
+	_add_row("铜钱数字位置 X", "coin_digits_pos_x", -400, 500, 1.0)
 	_add_row("铜钱数字位置 Y", "coin_digits_pos_y", -100, 150, 1.0)
 	_add_row("铜钱数字大小", "coin_digits_scale", 0.1, 2.0, 0.01)
+	_vbox.add_child(HSeparator.new())
+
+	var title_yuanbao_hud := Label.new()
+	title_yuanbao_hud.text = "▼ 关卡 HUD 元宝统计"
+	title_yuanbao_hud.add_theme_font_size_override("font_size", 22)
+	title_yuanbao_hud.add_theme_color_override("font_color", Color(1, 0.9, 0.35, 1))
+	_vbox.add_child(title_yuanbao_hud)
+	_add_row("元宝图标位置 X", "yuanbao_icon_pos_x", -1000, 400, 1.0)
+	_add_row("元宝图标位置 Y", "yuanbao_icon_pos_y", -100, 150, 1.0)
+	_add_row("元宝图标大小", "yuanbao_icon_scale", 0.1, 2.0, 0.01)
+	_add_row("元宝数字位置 X", "yuanbao_digits_pos_x", -400, 500, 1.0)
+	_add_row("元宝数字位置 Y", "yuanbao_digits_pos_y", -100, 150, 1.0)
+	_add_row("元宝数字大小", "yuanbao_digits_scale", 0.1, 2.0, 0.01)
+	_vbox.add_child(HSeparator.new())
+
+	var title_countdown_hud := Label.new()
+	title_countdown_hud.text = "▼ 关卡 HUD 游戏倒计时背景牌"
+	title_countdown_hud.add_theme_font_size_override("font_size", 22)
+	title_countdown_hud.add_theme_color_override("font_color", Color(0.55, 0.85, 1.0, 1))
+	_vbox.add_child(title_countdown_hud)
+	_add_row("倒计时背景牌位置 X", "countdown_bg_pos_x", 0, 1920, 2.0)
+	_add_row("倒计时背景牌位置 Y", "countdown_bg_pos_y", 0, 300, 1.0)
+	_add_row("倒计时背景牌大小", "countdown_bg_scale", 0.1, 4.0, 0.01)
+	_add_row("倒计时数字位置 X", "countdown_digits_pos_x", -1000, 1920, 1.0)
+	_add_row("倒计时数字位置 Y", "countdown_digits_pos_y", -150, 200, 1.0)
+	_add_row("倒计时数字缩放", "countdown_digits_scale", 0.1, 4.0, 0.01)
 	_vbox.add_child(HSeparator.new())
 
 	var title_vanish := Label.new()
@@ -257,6 +397,7 @@ func _build_ui() -> void:
 
 func _add_row(label_text: String, prop: String, min_v: float, max_v: float, step: float) -> void:
 	var hbox := HBoxContainer.new()
+	hbox.set_meta("tuning_parameter_row", true)
 	hbox.add_theme_constant_override("separation", 8)
 	_vbox.add_child(hbox)
 
@@ -340,6 +481,50 @@ func _format_value(v: float) -> String:
 		return "%.2f" % v
 	return "%.0f" % v
 
+func _can_start_panel_drag() -> bool:
+	if _panel == null:
+		return false
+	var mouse_pos := _panel.get_global_mouse_position()
+	if not Rect2(_panel.global_position, _panel.size).has_point(mouse_pos):
+		return false
+	var hovered := get_viewport().gui_get_hovered_control()
+	if hovered == null:
+		return true
+	if not _is_descendant_of(hovered, _panel):
+		return false
+	return not _is_parameter_control(hovered)
+
+func _is_descendant_of(node: Node, ancestor: Node) -> bool:
+	var current := node
+	while current != null:
+		if current == ancestor:
+			return true
+		current = current.get_parent()
+	return false
+
+func _is_parameter_control(control: Control) -> bool:
+	var current: Node = control
+	while current != null and current != _panel:
+		if current.has_meta("tuning_parameter_row"):
+			return true
+		if current is Range or current is LineEdit:
+			return true
+		current = current.get_parent()
+	return false
+
+func _move_panel_to(pos: Vector2) -> void:
+	var viewport_size := get_viewport().get_visible_rect().size
+	var panel_size := _panel.size
+	var max_pos := Vector2(
+		max(0.0, viewport_size.x - panel_size.x),
+		max(0.0, viewport_size.y - panel_size.y)
+	)
+	var clamped_pos := Vector2(
+		clamp(pos.x, 0.0, max_pos.x),
+		clamp(pos.y, 0.0, max_pos.y)
+	)
+	_panel.global_position = clamped_pos
+
 func _reset_defaults() -> void:
 	CharTuning.sprite_scale = 0.35
 	CharTuning.sprite_offset_x = 0.0
@@ -355,12 +540,75 @@ func _reset_defaults() -> void:
 	CharTuning.inhale_fx_scale = 1.0
 	CharTuning.inhale_fx_offset_x = 0.0
 	CharTuning.inhale_fx_offset_y = 0.0
+	CharTuning.drop_yuanbao_offset_x = 0.0
+	CharTuning.drop_yuanbao_offset_y = 0.0
+	CharTuning.drop_yuanbao_scale = 0.40
+	CharTuning.drop_yuanbao_fall_half_height = 35.0
+	CharTuning.fdk_sprite_scale = 0.42
+	CharTuning.fdk_sprite_offset_x = 0.0
+	CharTuning.fdk_sprite_offset_y = -166.0
+	CharTuning.fdk_col_offset_x = 18.0
+	CharTuning.fdk_col_offset_y = -108.0
+	CharTuning.fdk_col_width = 138.0
+	CharTuning.fdk_col_height = 204.0
+	CharTuning.fdk_col_scale = 1.0
+	CharTuning.fdk_mechanism_pos_x = 0.0
+	CharTuning.fdk_mechanism_pos_y = 0.0
+	CharTuning.fdk_mechanism_scale = 1.0
+	CharTuning.fdk_mechanism_pivot_x = 0.0
+	CharTuning.fdk_mechanism_pivot_y = 0.0
+	CharTuning.fdk_mechanism_rotation = 0.0
+	CharTuning.fdk_ball_scale = 0.55
+	CharTuning.fdk_ball_rest_offset_x = 0.0
+	CharTuning.fdk_ball_rest_offset_y = 0.0
+	CharTuning.fdk_ball_track_offset_y = 0.0
+	CharTuning.fdk_ball_spin_speed = 1.0
+	CharTuning.fdk_ball_roll_speed = 260.0
+	CharTuning.shell_firecracker_scale = 0.6
+	CharTuning.shell_explode_offset_y = 0.0
+	CharTuning.shell_explode_scale = 0.6
+	CharTuning.shell_explode_art_offset_y = 0.0
+	CharTuning.boss_ghost_fire_scale = 0.58
+	CharTuning.boss_ghost_fire_offset_x = 0.0
+	CharTuning.boss_ghost_fire_offset_y = 24.0
+	CharTuning.heart_pos_x = 0.0
+	CharTuning.heart_pos_y = 0.0
+	CharTuning.heart_scale = 1.0
+	CharTuning.avatar_frame_pos_x = 20.0
+	CharTuning.avatar_frame_pos_y = 94.0
+	CharTuning.avatar_frame_scale = 0.5
+	CharTuning.fdk_avatar_frame_pos_x = 1772.0
+	CharTuning.fdk_avatar_frame_pos_y = 94.0
+	CharTuning.fdk_avatar_frame_scale = 0.5
+	CharTuning.fdk_health_bar_pos_x = 1668.0
+	CharTuning.fdk_health_bar_pos_y = 136.0
+	CharTuning.fdk_health_bar_width = 92.0
+	CharTuning.fdk_health_bar_height = 24.0
+	CharTuning.boss_avatar_frame_pos_x = 1772.0
+	CharTuning.boss_avatar_frame_pos_y = 76.0
+	CharTuning.boss_avatar_frame_scale = 0.125
+	CharTuning.boss_health_bar_pos_x = 1508.0
+	CharTuning.boss_health_bar_pos_y = 128.0
+	CharTuning.boss_health_bar_width = 232.0
+	CharTuning.boss_health_bar_height = 28.0
 	CharTuning.coin_icon_pos_x = 0.0
 	CharTuning.coin_icon_pos_y = 2.0
 	CharTuning.coin_icon_scale = 0.45
 	CharTuning.coin_digits_pos_x = 72.0
 	CharTuning.coin_digits_pos_y = 6.0
 	CharTuning.coin_digits_scale = 1.0
+	CharTuning.yuanbao_icon_pos_x = 0.0
+	CharTuning.yuanbao_icon_pos_y = 8.0
+	CharTuning.yuanbao_icon_scale = 0.45
+	CharTuning.yuanbao_digits_pos_x = 98.0
+	CharTuning.yuanbao_digits_pos_y = 6.0
+	CharTuning.yuanbao_digits_scale = 1.0
+	CharTuning.countdown_bg_pos_x = 870.0
+	CharTuning.countdown_bg_pos_y = 52.0
+	CharTuning.countdown_bg_scale = 1.20
+	CharTuning.countdown_digits_pos_x = 0.0
+	CharTuning.countdown_digits_pos_y = 0.0
+	CharTuning.countdown_digits_scale = 1.0
 	for row in _rows:
 		var slider: HSlider = row["slider"]
 		var value_label: Label = row["value_label"]

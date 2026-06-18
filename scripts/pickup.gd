@@ -34,12 +34,14 @@ var _coin_anim_timer: float = 0.0
 # 通用落地状态（COIN 和 STAR 共用）
 var _fall_vel: float = 0.0
 var _landed: bool = false
+var _fall_half_height: float = FALL_HALF_HEIGHT
 
 # STAR 序列帧状态
 var _star_frames: Array = []
 var _star_frame_idx: int = 0
 var _star_anim_timer: float = 0.0
 var _star_playing: bool = false   # false = 待机停留在第 1 帧；true = 正在播放序列
+var _collected: bool = false
 
 @onready var sprite: Sprite2D = $Sprite
 
@@ -55,7 +57,7 @@ const VALUES := {
 const TEX := {
 	Type.APPLE:  "res://assets/sprites/prop_apple.png",
 	Type.CHERRY: "res://assets/sprites/prop_cherry.png",
-	# STAR 用 Yuanbao_01.png（"元宝"），地图字符 'r'
+	# STAR 用 Yuanbao_01.png（"元宝"），由鬼球碰撞敌人掉落
 	Type.STAR:   "res://assets/sprites/GeneralElements/Yuanbao/Yuanbao_01.png",
 	Type.HEART:  "res://assets/sprites/prop_heart.png",
 }
@@ -110,9 +112,18 @@ func _ready() -> void:
 		_star_anim_timer = randf() * STAR_IDLE_INTERVAL
 	else:
 		sprite.texture = load(TEX[pickup_type])
-	var s: float = SPRITE_SCALE.get(pickup_type, 1.0)
-	sprite.scale = Vector2(s, s)
+	_apply_tuning()
+	CharTuning.tuning_changed.connect(_apply_tuning)
 	body_entered.connect(_on_body_entered)
+
+func _apply_tuning() -> void:
+	var s: float = SPRITE_SCALE.get(pickup_type, 1.0)
+	if pickup_type == Type.STAR:
+		s = CharTuning.drop_yuanbao_scale
+		_fall_half_height = CharTuning.drop_yuanbao_fall_half_height
+	else:
+		_fall_half_height = FALL_HALF_HEIGHT
+	sprite.scale = Vector2(s, s)
 
 func _process(delta: float) -> void:
 	# COIN 序列帧动画（独立于 lifetime fade）
@@ -160,7 +171,7 @@ func _tick_fall(delta: float) -> void:
 	_fall_vel = min(FALL_MAX_SPEED, _fall_vel + FALL_GRAVITY * delta)
 	var step: float = _fall_vel * delta
 	var from: Vector2 = global_position
-	var to: Vector2 = from + Vector2(0, step + FALL_HALF_HEIGHT)
+	var to: Vector2 = from + Vector2(0, step + _fall_half_height)
 	var space := get_world_2d().direct_space_state
 	var ray := PhysicsRayQueryParameters2D.create(from, to)
 	ray.collision_mask = 1  # tile 地面层
@@ -170,27 +181,34 @@ func _tick_fall(delta: float) -> void:
 		global_position.y += step
 	else:
 		# 碰到地面：贴在地面之上
-		global_position.y = hit.position.y - FALL_HALF_HEIGHT
+		global_position.y = hit.position.y - _fall_half_height
 		_fall_vel = 0.0
 		_landed = true
 
 func _on_body_entered(body: Node) -> void:
-	if body is Player:
-		if pickup_type == Type.HEART:
-			GameState.gain_life()
-		else:
-			GameState.add_score(VALUES[pickup_type])
-			if pickup_type == Type.COIN:
-				_play_coin_fly_to_hud()
-				GameState.add_coin()
-				_play_coin_pickup_sfx()
-		queue_free()
-
-func _play_coin_fly_to_hud() -> void:
-	var hud := _get_hud()
-	if hud == null or not hud.has_method("play_coin_pickup_fly"):
+	if _collected or not (body is Player):
 		return
-	hud.play_coin_pickup_fly(global_position, sprite.texture, _get_sprite_screen_size())
+	_collected = true
+	set_deferred("monitoring", false)
+	if pickup_type == Type.HEART:
+		GameState.gain_life()
+	else:
+		GameState.add_score(VALUES[pickup_type])
+		if pickup_type == Type.COIN:
+			_play_pickup_fly_to_hud("play_coin_pickup_fly")
+			GameState.add_coin()
+			_play_coin_pickup_sfx()
+		elif pickup_type == Type.STAR:
+			_play_pickup_fly_to_hud("play_yuanbao_pickup_fly")
+			GameState.add_yuanbao()
+			_play_coin_pickup_sfx()
+	call_deferred("queue_free")
+
+func _play_pickup_fly_to_hud(method_name: StringName) -> void:
+	var hud := _get_hud()
+	if hud == null or not hud.has_method(method_name):
+		return
+	hud.call(method_name, global_position, sprite.texture, _get_sprite_screen_size())
 
 func _get_hud() -> Node:
 	var current := get_tree().current_scene

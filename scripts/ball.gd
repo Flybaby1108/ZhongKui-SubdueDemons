@@ -9,16 +9,18 @@ const ROLL_SPIN_SPEED := TAU * 2.0  # 2 圈/秒
 # 团状形态视觉缩放：由 CharTuning.ball_sprite_scale 控制（F1 调参面板可实时调节）
 
 # 按 Enemy.Type enum 映射团状翻滚贴图
-# 0=METEOR_HAMMER, 1=RED_GHOST, 2=RED_DEVIL, 3=PALACE_ZOMBIE
+# 0=METEOR_HAMMER, 1=RED_GHOST, 2=RED_DEVIL, 3=PALACE_ZOMBIE, 4=FAT_DEMON_KING
 const LAUNCHED_TEX := {
 	0: "res://assets/sprites/Enemy/MeteorHammer/MeteorHammer_launched/MeteorHammer_launched.png",
 	1: "res://assets/sprites/Enemy/RedGhost/RedGhost_launched/RedGhost_launched.png",
 	2: "res://assets/sprites/Enemy/RedDevil/RedDevil_launched/RedDevil_launched.png",
 	3: "res://assets/sprites/Enemy/PalaceZombie/PalaceZombie_launched/PalaceZombie_launched.png",
+	4: "res://assets/sprites/Enemy/FatDemonKing/FatDemonKing_idle/FatDemonKing_idle_01.png",
 }
 
 const COLLISION_SFX_PATH := "res://assets/audio/Zhongkui_Inhale_Collision.mp3"
 const PICKUP_SCENE = preload("res://scenes/pickup.tscn")
+const ACTIVE_BALL_GROUP := "active_ghost_balls"
 
 # FireSkull 喷出后的帧动画序列（FireSkull 在 ball 形态下继续循环播放原序列帧）。
 # enemy_type == FireSkull.FIRE_SKULL_TYPE_ID 时启用此分支，跳过 LAUNCHED_TEX 单帧贴图。
@@ -41,19 +43,23 @@ var roll_timer: float = ROLL_TIME
 var enemy_type: int = 0
 var direction: int = 1
 var capture_count: int = 1
+var drop_pickup_type: Pickup.Type = Pickup.Type.COIN
 var already_hit: Array = []
 # FireSkull 专属帧动画状态（仅 enemy_type == FIRE_SKULL_TYPE_ID 时生效）
 var _fs_frames: Array = []
 var _fs_idx: int = 0
 var _fs_t: float = 0.0
 var _is_fire_skull: bool = false
+var _free_queued: bool = false
 var collision_sfx: AudioStreamPlayer = null
 
 @onready var sprite: Sprite2D = $Sprite
 @onready var hit_area: Area2D = $HitArea
 
 func _ready() -> void:
+	add_to_group(ACTIVE_BALL_GROUP)
 	hit_area.body_entered.connect(_on_hit_body)
+	hit_area.area_entered.connect(_on_hit_area)
 	_setup_collision_sfx()
 	# 监听调参变化，实时同步 sprite scale
 	CharTuning.tuning_changed.connect(_apply_tuning)
@@ -97,7 +103,8 @@ func launch(initial_velocity: Vector2, captured_type: int, captures: int = 1) ->
 	velocity = initial_velocity
 	enemy_type = captured_type
 	direction = 1 if initial_velocity.x >= 0.0 else -1
-	capture_count = clampi(captures, 1, 3)
+	capture_count = clampi(captures, 1, 5)
+	drop_pickup_type = Pickup.Type.STAR if capture_count >= 3 else Pickup.Type.COIN
 	# FireSkull 喷出：走帧动画分支，sprite 始终朝飞行方向（不翻滚）。
 	# enemy_type == FireSkull.FIRE_SKULL_TYPE_ID（-1）是 boss 投射物的特殊标识。
 	if captured_type == FireSkull.FIRE_SKULL_TYPE_ID:
@@ -122,7 +129,7 @@ func launch(initial_velocity: Vector2, captured_type: int, captures: int = 1) ->
 func _physics_process(delta: float) -> void:
 	roll_timer -= delta
 	if roll_timer <= 0.0:
-		queue_free()
+		_queue_free_deferred()
 		return
 	velocity.y += GRAVITY * delta
 	velocity.x = ROLL_SPEED * direction
@@ -148,6 +155,12 @@ func _physics_process(delta: float) -> void:
 
 func _on_hit_body(body: Node) -> void:
 	print("[BALL DEBUG] _on_hit_body fired. body=", body, " is_Boss=", body is Boss, " is_Enemy=", body is Enemy, " body.name=", body.name if body else "<null>")
+	if body != null and body.is_in_group("boss_ghost_fire"):
+		if body.has_method("_queue_free_deferred"):
+			body.call_deferred("_queue_free_deferred")
+		else:
+			body.call_deferred("queue_free")
+		return
 	if body is Boss and not body.dying and not already_hit.has(body):
 		_try_hit_boss(body)
 		return
@@ -157,21 +170,43 @@ func _on_hit_body(body: Node) -> void:
 		if "summon_invuln_t" in body and body.summon_invuln_t > 0.0:
 			return
 		already_hit.append(body)
-		# 每个被滚动 ball 撞死的敌人只爆 1 枚铜钱
-		_drop_coin(body.global_position)
-		_play_enemy_hit_sfx()
-		body.die()
+		call_deferred("_resolve_enemy_hit", body, body.global_position)
 
-func _drop_coin(at: Vector2) -> void:
+func _on_hit_area(area: Area2D) -> void:
+	if area != null and area.is_in_group("boss_ghost_fire"):
+		if area.has_method("_queue_free_deferred"):
+			area.call_deferred("_queue_free_deferred")
+		else:
+			area.call_deferred("queue_free")
+
+func _resolve_enemy_hit(enemy: Enemy, hit_position: Vector2) -> void:
+	if not is_instance_valid(enemy) or enemy.dying:
+		return
+	if enemy.enemy_type == Enemy.Type.FAT_DEMON_KING:
+		_play_enemy_hit_sfx()
+		enemy.take_damage(1)
+		if enemy.dying:
+			_drop_reward(hit_position)
+		return
+	# 每个被滚动 ball 撞死的敌人按本次吸入数量爆 1 个奖励：
+	# 1-2 只掉铜钱，3-5 只掉元宝。
+	_drop_reward(hit_position)
+	_play_enemy_hit_sfx()
+	enemy.die()
+
+func _drop_reward(at: Vector2) -> void:
 	var parent = get_parent()
 	if parent == null:
 		return
-	var coin = PICKUP_SCENE.instantiate()
-	coin.pickup_type = Pickup.Type.COIN
-	parent.add_child(coin)
-	# 在敌人位置生成铜钱；铜钱自身有重力 + 地面探测，会自动落到正下方最近的平台/地面上
+	var reward = PICKUP_SCENE.instantiate()
+	reward.pickup_type = drop_pickup_type
+	parent.add_child(reward)
+	# 在敌人位置生成奖励；道具自身有重力 + 地面探测，会自动落到正下方最近的平台/地面上
 	# （即使敌人当时在空中、悬崖边、平台上方多层结构等情况都能正确处理）
-	coin.global_position = at
+	if drop_pickup_type == Pickup.Type.STAR:
+		reward.global_position = at + Vector2(CharTuning.drop_yuanbao_offset_x, CharTuning.drop_yuanbao_offset_y)
+	else:
+		reward.global_position = at
 
 func _check_boss_hurt_hits() -> void:
 	for boss in get_tree().get_nodes_in_group("boss"):
@@ -194,3 +229,9 @@ func _get_hit_rect_global() -> Rect2:
 		var size: Vector2 = hit_shape.shape.size * hit_shape.global_scale.abs()
 		rect = Rect2(hit_shape.global_position - size * 0.5, size)
 	return rect
+
+func _queue_free_deferred() -> void:
+	if _free_queued:
+		return
+	_free_queued = true
+	call_deferred("queue_free")

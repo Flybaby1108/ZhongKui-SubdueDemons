@@ -9,7 +9,7 @@ const SUCK_RANGE := Vector2(240, 120)
 const BALL_SPEED := 1500.0
 const HURT_INVINCIBLE_TIME := 1.5
 const HOLD_TIME_LIMIT := 5.0
-const MAX_CAPTURED := 3
+const MAX_CAPTURED := 5
 const VACUUM_CHARGE_TIME := 1.0
 const INHALE_SFX_PATH := "res://assets/audio/Zhongkui_Inhale.mp3"
 const INHALE_ENTER_SFX_PATH := "res://assets/audio/Zhongkui_Inhale_Enter.mp3"
@@ -435,6 +435,8 @@ func _apply_suction(delta: float) -> void:
 			suction_anim_timer -= SUCTION_ANIM_SPEED
 			suction_anim_frame = (suction_anim_frame + 1) % _suction_textures.size()
 		suction_visual.texture = _suction_textures[suction_anim_frame]
+	if not suction_area.monitoring:
+		return
 	# 吸气全程（蓄力期 + 完成期）：被吸到的敌人**完全冻结**在原地，绝不漂移。
 	# 累计计满 → 立刻进入 in-flight 阶段（0.4s 自我推进飞向葫芦，与玩家是否仍按键解耦）。
 	# 设计要点：
@@ -453,6 +455,8 @@ func _apply_suction(delta: float) -> void:
 		#  is_captured / is_in_flight / suction_hold_timer / enemy_type），
 		# 这里只需把判定从 `is Enemy` 扩展为 `is Enemy or is FireSkull` 即可。
 		if not (body is Enemy or body is FireSkull) or body.is_captured or body.is_in_flight:
+			continue
+		if body is Enemy and body.enemy_type == Enemy.Type.FAT_DEMON_KING:
 			continue
 		# 冻结敌人在原地（蓄力 + 完成期都用同一套冻结逻辑）
 		body.freeze_for_suction(vanish_point)
@@ -504,11 +508,16 @@ func _shoot_balls() -> void:
 		ball.global_position = global_position + Vector2(dir_x * (100 + i * 30), -i * 4)
 		ball.launch(Vector2(dir_x, 0) * BALL_SPEED, enemy.enemy_type, capture_count)
 		_play_inhale_out_sfx()
-		enemy.queue_free()
+		enemy.call_deferred("queue_free")
 	captured_enemies.clear()
 	hold_timer = 0.0
 
 func _tick_hold_timer(delta: float) -> void:
+	# 关卡已通关（进入通关动画流程）：停止累积 hold_timer，避免动画期间葫芦持有
+	# 敌人超时引爆，否则会清零生命并在动画播完后切到 GAME OVER。
+	if GameState.is_level_cleared():
+		hold_warning.visible = false
+		return
 	if captured_enemies.is_empty():
 		hold_timer = 0.0
 		hold_warning.visible = false
@@ -527,12 +536,12 @@ func _tick_hold_timer(delta: float) -> void:
 func _explode() -> void:
 	for enemy in captured_enemies:
 		if is_instance_valid(enemy):
-			enemy.queue_free()
+			enemy.call_deferred("queue_free")
 	captured_enemies.clear()
 	hold_timer = 0.0
 	GameState.lives = 0
 	GameState.lives_changed.emit(0)
-	await get_tree().create_timer(0.3).timeout
+	await GameState.wait(self, 0.3)
 	GameState.goto_game_over()
 
 func _update_carried_enemy_position() -> void:
@@ -595,8 +604,11 @@ func take_damage() -> void:
 	anim_state = "hurt"
 	_apply_frame()
 	if GameState.lives <= 0:
-		await get_tree().create_timer(0.5).timeout
-		GameState.goto_game_over()
+		await GameState.wait(self, 0.5)
+		GameState.call_deferred("goto_game_over")
+
+func ignores_boss_ghost_fire_damage() -> bool:
+	return not is_on_floor()
 
 func _tick_invincibility(delta: float) -> void:
 	if not invincible:
@@ -631,9 +643,11 @@ func _on_hurt_box_body_entered(body: Node) -> void:
 		invincible = true
 		invincible_timer = HURT_INVINCIBLE_TIME
 		take_damage()
-		body.queue_free()
+		body.call_deferred("queue_free")
 
 func _damage_from_overlapping_enemy() -> void:
+	if invincible or not hurt_box.monitoring:
+		return
 	var current_frame := Engine.get_physics_frames()
 	if current_frame - last_damage_frame < 90:
 		return

@@ -1,7 +1,7 @@
 extends CharacterBody2D
 class_name Enemy
 
-enum Type { METEOR_HAMMER, RED_GHOST, RED_DEVIL, PALACE_ZOMBIE }
+enum Type { METEOR_HAMMER, RED_GHOST, RED_DEVIL, PALACE_ZOMBIE, FAT_DEMON_KING }
 
 @export var enemy_type: Type = Type.METEOR_HAMMER
 
@@ -64,6 +64,7 @@ var is_captured: bool = false
 var captured_lock_velocity: Vector2 = Vector2.ZERO
 var anim_frame: int = 0
 var dying: bool = false
+var health: int = 1
 var charging: bool = false
 var charge_cooldown: float = 0.0
 var initial_y: float = 0.0
@@ -84,7 +85,9 @@ const SCORE_VALUES := {
 	Type.RED_GHOST: 300,
 	Type.RED_DEVIL: 400,
 	Type.PALACE_ZOMBIE: 500,
+	Type.FAT_DEMON_KING: 600,
 }
+const FAT_DEMON_KING_MAX_HEALTH := 10
 
 const TEX := {
 	Type.METEOR_HAMMER: {
@@ -312,6 +315,113 @@ const TEX := {
 		],
 		"die":            ["res://assets/sprites/Enemy/PalaceZombie/PalaceZombie_idle/PalaceZombie_idle_01.png"],
 	},
+	Type.FAT_DEMON_KING: {
+		"move":           [
+			"res://assets/sprites/Enemy/FatDemonKing/FatDemonKing_idle/FatDemonKing_idle_01.png",
+			"res://assets/sprites/Enemy/FatDemonKing/FatDemonKing_idle/FatDemonKing_idle_02.png",
+			"res://assets/sprites/Enemy/FatDemonKing/FatDemonKing_idle/FatDemonKing_idle_03.png",
+			"res://assets/sprites/Enemy/FatDemonKing/FatDemonKing_idle/FatDemonKing_idle_04.png",
+			"res://assets/sprites/Enemy/FatDemonKing/FatDemonKing_idle/FatDemonKing_idle_05.png",
+			"res://assets/sprites/Enemy/FatDemonKing/FatDemonKing_idle/FatDemonKing_idle_06.png",
+			"res://assets/sprites/Enemy/FatDemonKing/FatDemonKing_idle/FatDemonKing_idle_07.png",
+			"res://assets/sprites/Enemy/FatDemonKing/FatDemonKing_idle/FatDemonKing_idle_08.png",
+			"res://assets/sprites/Enemy/FatDemonKing/FatDemonKing_idle/FatDemonKing_idle_09.png",
+			"res://assets/sprites/Enemy/FatDemonKing/FatDemonKing_idle/FatDemonKing_idle_10.png",
+			"res://assets/sprites/Enemy/FatDemonKing/FatDemonKing_idle/FatDemonKing_idle_11.png",
+			"res://assets/sprites/Enemy/FatDemonKing/FatDemonKing_idle/FatDemonKing_idle_12.png",
+			"res://assets/sprites/Enemy/FatDemonKing/FatDemonKing_idle/FatDemonKing_idle_13.png",
+			"res://assets/sprites/Enemy/FatDemonKing/FatDemonKing_idle/FatDemonKing_idle_14.png",
+			"res://assets/sprites/Enemy/FatDemonKing/FatDemonKing_idle/FatDemonKing_idle_15.png",
+			"res://assets/sprites/Enemy/FatDemonKing/FatDemonKing_idle/FatDemonKing_idle_16.png",
+		],
+		"captured":       "res://assets/sprites/Enemy/FatDemonKing/FatDemonKing_idle/FatDemonKing_idle_01.png",
+		"capture_front":  "res://assets/sprites/Enemy/FatDemonKing/FatDemonKing_idle/FatDemonKing_idle_01.png",
+		"capture_back":   "res://assets/sprites/Enemy/FatDemonKing/FatDemonKing_idle/FatDemonKing_idle_01.png",
+		"idle":           [
+			"res://assets/sprites/Enemy/FatDemonKing/FatDemonKing_idle/FatDemonKing_idle_01.png",
+			"res://assets/sprites/Enemy/FatDemonKing/FatDemonKing_idle/FatDemonKing_idle_02.png",
+			"res://assets/sprites/Enemy/FatDemonKing/FatDemonKing_idle/FatDemonKing_idle_03.png",
+			"res://assets/sprites/Enemy/FatDemonKing/FatDemonKing_idle/FatDemonKing_idle_04.png",
+			"res://assets/sprites/Enemy/FatDemonKing/FatDemonKing_idle/FatDemonKing_idle_05.png",
+			"res://assets/sprites/Enemy/FatDemonKing/FatDemonKing_idle/FatDemonKing_idle_06.png",
+			"res://assets/sprites/Enemy/FatDemonKing/FatDemonKing_idle/FatDemonKing_idle_07.png",
+			"res://assets/sprites/Enemy/FatDemonKing/FatDemonKing_idle/FatDemonKing_idle_08.png",
+			"res://assets/sprites/Enemy/FatDemonKing/FatDemonKing_idle/FatDemonKing_idle_09.png",
+			"res://assets/sprites/Enemy/FatDemonKing/FatDemonKing_idle/FatDemonKing_idle_10.png",
+			"res://assets/sprites/Enemy/FatDemonKing/FatDemonKing_idle/FatDemonKing_idle_11.png",
+			"res://assets/sprites/Enemy/FatDemonKing/FatDemonKing_idle/FatDemonKing_idle_12.png",
+			"res://assets/sprites/Enemy/FatDemonKing/FatDemonKing_idle/FatDemonKing_idle_13.png",
+			"res://assets/sprites/Enemy/FatDemonKing/FatDemonKing_idle/FatDemonKing_idle_14.png",
+			"res://assets/sprites/Enemy/FatDemonKing/FatDemonKing_idle/FatDemonKing_idle_15.png",
+			"res://assets/sprites/Enemy/FatDemonKing/FatDemonKing_idle/FatDemonKing_idle_16.png",
+		],
+		"fdk_attack":     [
+			"res://assets/sprites/Enemy/FatDemonKing/FatDemonKing_Attack1/FatDemonKing_Attack1_01.png",
+			"res://assets/sprites/Enemy/FatDemonKing/FatDemonKing_Attack1/FatDemonKing_Attack1_02.png",
+			"res://assets/sprites/Enemy/FatDemonKing/FatDemonKing_Attack1/FatDemonKing_Attack1_03.png",
+			"res://assets/sprites/Enemy/FatDemonKing/FatDemonKing_Attack1/FatDemonKing_Attack1_04.png",
+			"res://assets/sprites/Enemy/FatDemonKing/FatDemonKing_Attack1/FatDemonKing_Attack1_05.png",
+			"res://assets/sprites/Enemy/FatDemonKing/FatDemonKing_Attack1/FatDemonKing_Attack1_06.png",
+			"res://assets/sprites/Enemy/FatDemonKing/FatDemonKing_Attack1/FatDemonKing_Attack1_07.png",
+			"res://assets/sprites/Enemy/FatDemonKing/FatDemonKing_Attack1/FatDemonKing_Attack1_08.png",
+			"res://assets/sprites/Enemy/FatDemonKing/FatDemonKing_Attack1/FatDemonKing_Attack1_09.png",
+			"res://assets/sprites/Enemy/FatDemonKing/FatDemonKing_Attack1/FatDemonKing_Attack1_10.png",
+			"res://assets/sprites/Enemy/FatDemonKing/FatDemonKing_Attack1/FatDemonKing_Attack1_11.png",
+			"res://assets/sprites/Enemy/FatDemonKing/FatDemonKing_Attack1/FatDemonKing_Attack1_12.png",
+			"res://assets/sprites/Enemy/FatDemonKing/FatDemonKing_Attack1/FatDemonKing_Attack1_13.png",
+			"res://assets/sprites/Enemy/FatDemonKing/FatDemonKing_Attack1/FatDemonKing_Attack1_14.png",
+			"res://assets/sprites/Enemy/FatDemonKing/FatDemonKing_Attack1/FatDemonKing_Attack1_15.png",
+			"res://assets/sprites/Enemy/FatDemonKing/FatDemonKing_Attack1/FatDemonKing_Attack1_16.png",
+		],
+		"fdk_attack2":    [
+			"res://assets/sprites/Enemy/FatDemonKing/FatDemonKing_Attack2/FatDemonKing_Attack2_01.png",
+			"res://assets/sprites/Enemy/FatDemonKing/FatDemonKing_Attack2/FatDemonKing_Attack2_02.png",
+			"res://assets/sprites/Enemy/FatDemonKing/FatDemonKing_Attack2/FatDemonKing_Attack2_03.png",
+			"res://assets/sprites/Enemy/FatDemonKing/FatDemonKing_Attack2/FatDemonKing_Attack2_04.png",
+			"res://assets/sprites/Enemy/FatDemonKing/FatDemonKing_Attack2/FatDemonKing_Attack2_05.png",
+			"res://assets/sprites/Enemy/FatDemonKing/FatDemonKing_Attack2/FatDemonKing_Attack2_06.png",
+			"res://assets/sprites/Enemy/FatDemonKing/FatDemonKing_Attack2/FatDemonKing_Attack2_07.png",
+			"res://assets/sprites/Enemy/FatDemonKing/FatDemonKing_Attack2/FatDemonKing_Attack2_08.png",
+			"res://assets/sprites/Enemy/FatDemonKing/FatDemonKing_Attack2/FatDemonKing_Attack2_09.png",
+			"res://assets/sprites/Enemy/FatDemonKing/FatDemonKing_Attack2/FatDemonKing_Attack2_10.png",
+			"res://assets/sprites/Enemy/FatDemonKing/FatDemonKing_Attack2/FatDemonKing_Attack2_11.png",
+			"res://assets/sprites/Enemy/FatDemonKing/FatDemonKing_Attack2/FatDemonKing_Attack2_12.png",
+			"res://assets/sprites/Enemy/FatDemonKing/FatDemonKing_Attack2/FatDemonKing_Attack2_13.png",
+			"res://assets/sprites/Enemy/FatDemonKing/FatDemonKing_Attack2/FatDemonKing_Attack2_14.png",
+			"res://assets/sprites/Enemy/FatDemonKing/FatDemonKing_Attack2/FatDemonKing_Attack2_15.png",
+			"res://assets/sprites/Enemy/FatDemonKing/FatDemonKing_Attack2/FatDemonKing_Attack2_16.png",
+			"res://assets/sprites/Enemy/FatDemonKing/FatDemonKing_Attack2/FatDemonKing_Attack2_17.png",
+			"res://assets/sprites/Enemy/FatDemonKing/FatDemonKing_Attack2/FatDemonKing_Attack2_18.png",
+			"res://assets/sprites/Enemy/FatDemonKing/FatDemonKing_Attack2/FatDemonKing_Attack2_19.png",
+			"res://assets/sprites/Enemy/FatDemonKing/FatDemonKing_Attack2/FatDemonKing_Attack2_20.png",
+			"res://assets/sprites/Enemy/FatDemonKing/FatDemonKing_Attack2/FatDemonKing_Attack2_21.png",
+			"res://assets/sprites/Enemy/FatDemonKing/FatDemonKing_Attack2/FatDemonKing_Attack2_22.png",
+		],
+		"fdk_attack3":    [
+			"res://assets/sprites/Enemy/FatDemonKing/FatDemonKing_Attack3/FatDemonKing_Attack3_01.png",
+			"res://assets/sprites/Enemy/FatDemonKing/FatDemonKing_Attack3/FatDemonKing_Attack3_02.png",
+			"res://assets/sprites/Enemy/FatDemonKing/FatDemonKing_Attack3/FatDemonKing_Attack3_03.png",
+			"res://assets/sprites/Enemy/FatDemonKing/FatDemonKing_Attack3/FatDemonKing_Attack3_04.png",
+			"res://assets/sprites/Enemy/FatDemonKing/FatDemonKing_Attack3/FatDemonKing_Attack3_05.png",
+			"res://assets/sprites/Enemy/FatDemonKing/FatDemonKing_Attack3/FatDemonKing_Attack3_06.png",
+			"res://assets/sprites/Enemy/FatDemonKing/FatDemonKing_Attack3/FatDemonKing_Attack3_07.png",
+			"res://assets/sprites/Enemy/FatDemonKing/FatDemonKing_Attack3/FatDemonKing_Attack3_08.png",
+			"res://assets/sprites/Enemy/FatDemonKing/FatDemonKing_Attack3/FatDemonKing_Attack3_09.png",
+			"res://assets/sprites/Enemy/FatDemonKing/FatDemonKing_Attack3/FatDemonKing_Attack3_10.png",
+			"res://assets/sprites/Enemy/FatDemonKing/FatDemonKing_Attack3/FatDemonKing_Attack3_11.png",
+			"res://assets/sprites/Enemy/FatDemonKing/FatDemonKing_Attack3/FatDemonKing_Attack3_12.png",
+			"res://assets/sprites/Enemy/FatDemonKing/FatDemonKing_Attack3/FatDemonKing_Attack3_13.png",
+			"res://assets/sprites/Enemy/FatDemonKing/FatDemonKing_Attack3/FatDemonKing_Attack3_14.png",
+			"res://assets/sprites/Enemy/FatDemonKing/FatDemonKing_Attack3/FatDemonKing_Attack3_15.png",
+			"res://assets/sprites/Enemy/FatDemonKing/FatDemonKing_Attack3/FatDemonKing_Attack3_16.png",
+			"res://assets/sprites/Enemy/FatDemonKing/FatDemonKing_Attack3/FatDemonKing_Attack3_17.png",
+			"res://assets/sprites/Enemy/FatDemonKing/FatDemonKing_Attack3/FatDemonKing_Attack3_18.png",
+			"res://assets/sprites/Enemy/FatDemonKing/FatDemonKing_Attack3/FatDemonKing_Attack3_19.png",
+			"res://assets/sprites/Enemy/FatDemonKing/FatDemonKing_Attack3/FatDemonKing_Attack3_20.png",
+			"res://assets/sprites/Enemy/FatDemonKing/FatDemonKing_Attack3/FatDemonKing_Attack3_21.png",
+		],
+		"die":            ["res://assets/sprites/Enemy/FatDemonKing/FatDemonKing_idle/FatDemonKing_idle_01.png"],
+	},
 }
 
 var _frames: Array = []
@@ -319,13 +429,18 @@ var _frames: Array = []
 var _idle_frames: Array = []
 # attack 状态序列帧（仅 PALACE_ZOMBIE 配置；为空表示该敌人不会进入 ATTACK 状态）
 var _attack_frames: Array = []
+var _fdk_attack_frames: Array = []
+# Attack2 序列帧（仅 FAT_DEMON_KING；与 Attack1 交替施展，目前只播放动画无机关效果）
+var _fdk_attack2_frames: Array = []
+# Attack3 序列帧（仅 FAT_DEMON_KING；胖魔王拍手，从画面上方降落 6 个随机敌人）
+var _fdk_attack3_frames: Array = []
 
-# walk / idle / attack / dash / mh_attack 行为状态机：每个敌人在巡逻时随机切换 walk ↔ idle，idle 切回时随机决定是否折返
+# walk / idle / attack / dash / mh_attack / fdk_attack 行为状态机：每个敌人在巡逻时随机切换 walk ↔ idle，idle 切回时随机决定是否折返
 # ATTACK 状态：仅对 PALACE_ZOMBIE 启用，进入 IDLE 时按 ATTACK_PROB 概率改为 ATTACK（甩法杖射火种）
 # DASH 状态：仅对 RED_GHOST 启用，进入 IDLE 时按 DASH_PROB 概率改为 DASH（消失→突进3身位→flutter显现）
 # MH_ATTACK 状态：仅对 METEOR_HAMMER 启用，进入 IDLE 时按 MH_ATTACK_PROB 概率改为 MH_ATTACK
 #   （预备动作→扔流星锤→收回→回 IDLE）
-enum AnimState { WALK, IDLE, ATTACK, DASH, MH_ATTACK }
+enum AnimState { WALK, IDLE, ATTACK, DASH, MH_ATTACK, FDK_ATTACK, FDK_ATTACK2, FDK_ATTACK3 }
 var anim_state: int = AnimState.WALK
 var state_timer: float = 0.0
 var state_duration: float = 0.0  # 当前状态结束的总时长（随机）
@@ -337,6 +452,9 @@ const IDLE_DURATION_MIN := 1.0
 const IDLE_DURATION_MAX := 2.0
 # idle → walk 切换时折返概率
 const REVERSE_ON_RESUME_PROB := 0.5
+# 让敌人离平台边缘和前方墙体稍微远一点，避免 chapter2 左侧这种窄平台把 AI 夹住。
+const PLATFORM_EDGE_LOOKAHEAD := 12.0
+const WALL_REBOUND_NUDGE := 6.0
 
 # 宫廷僵尸 ATTACK 状态参数
 # 进入 IDLE 时按此概率改为 ATTACK（甩法杖射火种）
@@ -412,6 +530,103 @@ var _mh_hammer_node: Sprite2D = null      # 飞出去的锤子精灵（攻击期
 var _mh_hammer_area: Area2D = null        # 锤子的伤害检测 Area2D 子节点
 var _mh_hammer_frames: Array = []         # 5 张锤子纹理（预加载）
 var _mh_attack_frames: Array = []         # 28 张角色攻击纹理（预加载）
+
+# 胖魔王机关攻击（重做）：
+#   Mechanism 是一个常驻平台，右侧停着一颗铁球。平时机关平行（Rotation = 0）。
+#   FatDemonKing_Attack1 时，机关按固定时序动作：旋转倾斜(0.5秒) → 停留(2秒) → 复位(1秒)。
+#   机关旋转到 F1 编辑器设置的 fdk_mechanism_rotation 角度，铁球顺着倾斜角度滚落到上层
+#   平台，并沿“上层左滚→中层右滚→下层左滚出画面”的三层路径匀速滚动（与机关时序相互独立）。
+#   机关复位回 0 度后等待下一次 Attack1，循环往复。
+#   铁球只伤害钟馗（扣 1 血），不影响敌人。
+const FDK_INITIAL_ATTACK_DELAY := 3.0
+const FDK_ATTACK_INTERVAL := 5.0
+const FDK_ATTACK_FRAME_INTERVAL := 0.08
+# Attack3：胖魔王拍手后，从画面上方降落这么多个随机种类的敌人。
+const FDK_ATTACK3_SUMMON_COUNT := 6
+# 降落敌人的起始 Y（屏幕顶在 y=0，取负值让敌人从画面外落入），落地由重力接管。
+const FDK_ATTACK3_SPAWN_Y := -160.0
+# 拍手动画播到这一帧（0-indexed）时触发敌人降落（"拍手到位"的那一瞬间）。
+const FDK_ATTACK3_SUMMON_FRAME := 10
+# 三层平台降落点的 X 取值范围（仅作为拿不到关卡几何时的地面兜底横向区间）。
+const FDK_ATTACK3_SPAWN_X_MIN := 260.0
+const FDK_ATTACK3_SPAWN_X_MAX := 1650.0
+# 在目标平台横向范围内取 X 时，左右各留这么多像素边距，避免敌人落在平台边缘外翻下去。
+const FDK_ATTACK3_LANDING_EDGE_MARGIN := 60.0
+# 召唤落点避开钟馗，防止敌人刚落下就和玩家碰撞扣血。
+const FDK_ATTACK3_PLAYER_SAFE_X := 180.0
+const FDK_ATTACK3_PLAYER_SAFE_Y := 180.0
+const FDK_ATTACK3_SPAWN_PICK_ATTEMPTS := 10
+# 敌人从目标平台表面上方这么高处落下。取值需小于相邻两层表面间距（Stage3 约 260px），
+# 确保中层/地面的起点已落在上一层平台之下，不会被上一层平台拦截或卡进其底面。
+const FDK_ATTACK3_DROP_HEIGHT := 120.0
+# 归类三层落点时，判定两块平台是否属于"同一层"的表面高度容差（像素）。
+const FDK_ATTACK3_TIER_Y_TOLERANCE := 40.0
+# 可供 Attack3 降落召唤的随机敌人场景（与 Boss 召唤一致的四种杂兵）。
+const FDK_SUMMON_SCENE_PATHS := [
+	"res://scenes/enemy_meteor_hammer.tscn",
+	"res://scenes/enemy_red_ghost.tscn",
+	"res://scenes/enemy_red_devil.tscn",
+	"res://scenes/enemy_palace_zombie.tscn",
+]
+var _fdk_summon_scenes: Array = []
+# 本轮 Attack3 是否已触发降落（防止动画多帧重复召唤）。
+var _fdk_attack3_summoned: bool = false
+# Attack3 落点带轮换起点：每次施放 +1 取模 3，让三层平台/地面的降落分布更均衡。
+var _fdk_attack3_band_offset: int = 0
+# Attack2：收招（动画播完）后延迟这么久，炮弹从屏幕上方落下砸向钟馗（秒）。
+const FDK_ATTACK2_SHELL_DELAY := 1.0
+# 炮弹场景（从屏幕上方落下，命中钟馗扣 1 血）。
+const FDK_ARTILLERY_SHELL_SCENE := "res://scenes/artillery_shell.tscn"
+# 炮弹生成时的屏幕上方起始 Y（屏幕顶在 y=0，取负值让炮弹从画面外落入）。
+const FDK_ARTILLERY_SHELL_SPAWN_Y := -120.0
+const FDK_IRON_BALL_SCENE := "res://scenes/iron_ball.tscn"
+const FDK_IRON_BALL_TEXTURE := "res://assets/sprites/Chapter3/IronBall.png"
+const FDK_IRON_BALL_REST_SCALE := 0.55
+const FDK_MECHANISM_TEXTURE := "res://assets/sprites/Chapter3/Mechanism.png"
+# 机关倾斜 / 复位的过渡时间（秒）：倾斜耗时 0.5 秒，复位耗时 1 秒。
+const FDK_MECHANISM_TILT_TIME := 0.5
+const FDK_MECHANISM_RESET_TIME := 1.0
+# 机关倾斜到位后停留这么久，再开始复位（秒）。
+const FDK_MECHANISM_TILT_HOLD_TIME := 2.0
+# 倾斜完成后铁球开始滚落的延迟（秒）
+const FDK_BALL_RELEASE_DELAY := 0.18
+# 胖魔王执行攻击动画后，延迟这么久机关才开始旋转倾斜、铁球落下（秒）。
+const FDK_ATTACK_TILT_DELAY := 1.0
+# 机关相对胖魔王本体的默认摆放偏移（屏幕像素）。FDK 默认朝左，机关在身体前方。
+# 这些是先验估值，可由 F1 的 Mechanism Pos X/Y + Pivot X/Y 进一步微调。
+const FDK_MECHANISM_OFFSET := Vector2(-120.0, 30.0)
+# 三层平台 / 地面的滚动表面高度 Y（取自 level_data Stage3：tile=10px，表面顶= row*10）。
+# 上层平台 row35 → 表面 y≈350；中层平台 row61 → y≈610；下层地面 row85 → y≈850。
+const FDK_TRACK_UPPER_Y := 350.0
+const FDK_TRACK_MIDDLE_Y := 610.0
+const FDK_TRACK_GROUND_Y := 850.0
+# 各层的左右边界 X（终点掉落点）。
+# 上层平台 x 225~1885（左端为终点）；中层平台 x 25~1685（右端为终点）；地面全宽。
+const FDK_TRACK_UPPER_LEFT_X := 225.0
+const FDK_TRACK_MIDDLE_LEFT_X := 25.0
+const FDK_TRACK_MIDDLE_RIGHT_X := 1685.0
+const FDK_TRACK_GROUND_EXIT_X := -220.0
+# 铁球从机关左侧斜面滑下后，在上层平台上的着陆 X（位于机关下方偏左、上层平台范围内）。
+# 相对 spawn 向左偏移这么多像素，使铁球先沿斜面向左下滑落，再开始三层平台滚动。
+const FDK_TRACK_UPPER_LANDING_DX := -180.0
+# 着陆 X 的左右兜底范围（钳制在上层平台有效区间内，避免极端调参把落点推出平台）。
+const FDK_TRACK_UPPER_LANDING_MIN_X := 260.0
+const FDK_TRACK_UPPER_LANDING_MAX_X := 1700.0
+var _fdk_attack_cooldown: float = 0.0
+var _fdk_attack_accum: float = 0.0
+var _fdk_attack_frame_idx: int = 0
+# 下一次普通攻击的招式索引（0=Attack1, 1=Attack2, 2=Attack3），每次出招后 +1 取模，
+# 实现 Attack3 → Attack1 → Attack2 → Attack3 三招轮流，每 5 秒发动一次。首发为 Attack3。
+var _fdk_next_attack: int = 2
+var _fdk_mechanisms: Array[Node] = []
+static var _fdk_mechanism_texture_cache: Texture2D = null
+static var _resource_cache: Dictionary = {}
+static var _frame_cache: Dictionary = {}
+# 常驻机关平台（含静止铁球展示）与其当前活动的滚动铁球
+var _fdk_mechanism: Node2D = null
+var _fdk_active_ball: Node = null
+# 机关是否处于倾斜状态（倾斜→停留→复位时序进行中）。
+var _fdk_mechanism_tilted: bool = false
 # 当前 capture 状态的序列帧缓存（朝向变化或退出 capture 时重建/清空）
 var _capture_frames: Array = []
 var _capture_frame_idx: int = 0
@@ -469,35 +684,31 @@ const CAPTURE_SCALE_MUL := {
 
 func _ready() -> void:
 	add_to_group("enemy")
-	_frames = []
-	for path in TEX[enemy_type]["move"]:
-		_frames.append(load(path))
+	health = FAT_DEMON_KING_MAX_HEALTH if enemy_type == Type.FAT_DEMON_KING else 1
+	_frames = _get_cached_frame_list(TEX[enemy_type]["move"])
 	# 加载 idle 帧（若未配则退化为 walk 帧）
-	_idle_frames = []
+	_idle_frames = _frames
 	if TEX[enemy_type].has("idle"):
-		for path in TEX[enemy_type]["idle"]:
-			_idle_frames.append(load(path))
+		_idle_frames = _get_cached_frame_list(TEX[enemy_type]["idle"])
 	if _idle_frames.is_empty():
 		_idle_frames = _frames
 	# 加载 attack 帧（有 attack 配置的敌人会进入 ATTACK 状态）
-	_attack_frames = []
 	if TEX[enemy_type].has("attack"):
-		for path in TEX[enemy_type]["attack"]:
-			_attack_frames.append(load(path))
+		_attack_frames = _get_cached_frame_list(TEX[enemy_type]["attack"])
 	# 加载 dash flutter 帧（仅 RED_GHOST 配置；其他敌人 _dash_frames 留空 → 不会进入 DASH 状态）
-	_dash_frames = []
 	if TEX[enemy_type].has("dash"):
-		for path in TEX[enemy_type]["dash"]:
-			_dash_frames.append(load(path))
+		_dash_frames = _get_cached_frame_list(TEX[enemy_type]["dash"])
 	# 加载流星锤怪攻击帧 + 锤子帧（仅 METEOR_HAMMER 配置）
-	_mh_attack_frames = []
 	if TEX[enemy_type].has("mh_attack"):
-		for path in TEX[enemy_type]["mh_attack"]:
-			_mh_attack_frames.append(load(path))
-	_mh_hammer_frames = []
+		_mh_attack_frames = _get_cached_frame_list(TEX[enemy_type]["mh_attack"])
 	if TEX[enemy_type].has("mh_hammer"):
-		for path in TEX[enemy_type]["mh_hammer"]:
-			_mh_hammer_frames.append(load(path))
+		_mh_hammer_frames = _get_cached_frame_list(TEX[enemy_type]["mh_hammer"])
+	if TEX[enemy_type].has("fdk_attack"):
+		_fdk_attack_frames = _get_cached_frame_list(TEX[enemy_type]["fdk_attack"])
+	if TEX[enemy_type].has("fdk_attack2"):
+		_fdk_attack2_frames = _get_cached_frame_list(TEX[enemy_type]["fdk_attack2"])
+	if TEX[enemy_type].has("fdk_attack3"):
+		_fdk_attack3_frames = _get_cached_frame_list(TEX[enemy_type]["fdk_attack3"])
 	_apply_normal_texture(_frames[0], "move")
 	anim_timer.timeout.connect(_on_anim_tick)
 	anim_timer.start()
@@ -508,11 +719,19 @@ func _ready() -> void:
 	# 初始化 hop 检查计时（每只敌人随机错开第一次检查，避免整波同步换平台）
 	_hop_check_interval = randf_range(PLATFORM_HOP_CHECK_INTERVAL_MIN, PLATFORM_HOP_CHECK_INTERVAL_MAX)
 	_hop_check_timer = randf_range(0.0, _hop_check_interval)
+	wall_check.collision_mask = 1
 	# 不在此处获取 player_ref：敌人可能在 player 之前被实例化 (level grid 顺序)
 	# 改为在 _apply_capture_texture 中按需懒加载
 
 	CharTuning.tuning_changed.connect(_apply_tuning)
 	_apply_tuning()
+	if enemy_type == Type.FAT_DEMON_KING:
+		_fdk_attack_cooldown = FDK_INITIAL_ATTACK_DELAY
+		call_deferred("_notify_fat_demon_king_hud_show")
+
+func _exit_tree() -> void:
+	if CharTuning.tuning_changed.is_connected(_apply_tuning):
+		CharTuning.tuning_changed.disconnect(_apply_tuning)
 
 func _apply_tuning() -> void:
 	# shrink 阶段不要覆盖 sprite.scale / sprite.position —— shrink 公式接管
@@ -546,6 +765,19 @@ func _apply_tuning() -> void:
 		if collision and collision.shape is RectangleShape2D:
 			collision.position = Vector2(CharTuning.pz_col_offset_x, CharTuning.pz_col_offset_y)
 			(collision.shape as RectangleShape2D).size = Vector2(CharTuning.pz_col_width, CharTuning.pz_col_height)
+	elif enemy_type == Type.FAT_DEMON_KING:
+		if not skip_sprite:
+			sprite.scale = Vector2(CharTuning.fdk_sprite_scale, CharTuning.fdk_sprite_scale)
+			sprite.position = _get_base_sprite_offset()
+		if collision and collision.shape is RectangleShape2D:
+			collision.position = Vector2(CharTuning.fdk_col_offset_x, CharTuning.fdk_col_offset_y)
+			(collision.shape as RectangleShape2D).size = Vector2(
+				CharTuning.fdk_col_width * CharTuning.fdk_col_scale,
+				CharTuning.fdk_col_height * CharTuning.fdk_col_scale
+			)
+		for mechanism in _fdk_mechanisms:
+			if is_instance_valid(mechanism):
+				_apply_fdk_mechanism_tuning(mechanism)
 	# 如果当前处于 capture 状态，重新应用补偿（F1 调参后避免补偿丢失）
 	# 注意：shrink 阶段不在这里处理，shrink 公式已包含 mul
 	if _capture_key != "" and not is_being_shrunk:
@@ -585,6 +817,11 @@ func _draw() -> void:
 		cy = CharTuning.pz_col_offset_y
 		w = CharTuning.pz_col_width
 		h = CharTuning.pz_col_height
+	elif enemy_type == Type.FAT_DEMON_KING:
+		cx = CharTuning.fdk_col_offset_x
+		cy = CharTuning.fdk_col_offset_y
+		w = CharTuning.fdk_col_width * CharTuning.fdk_col_scale
+		h = CharTuning.fdk_col_height * CharTuning.fdk_col_scale
 		
 	var rect := Rect2(cx - w / 2.0, cy - h / 2.0, w, h)
 	draw_rect(rect, Color(0, 1, 1, 0.35), true)
@@ -647,6 +884,7 @@ const SUCTION_CAPTURE_TIME_BY_TYPE := {
 	Type.RED_DEVIL:     3.0,
 	Type.RED_GHOST:     1.0,
 	Type.PALACE_ZOMBIE: 1.0,
+	Type.FAT_DEMON_KING: 3.0,
 }
 
 func get_suction_capture_time() -> float:
@@ -732,8 +970,46 @@ func _physics_process(delta: float) -> void:
 			_process_walking_enemy(delta)
 		Type.PALACE_ZOMBIE:
 			_process_walking_enemy(delta)
+		Type.FAT_DEMON_KING:
+			_process_fat_demon_king(delta)
 			
 	is_being_sucked = false
+
+func _process_stationary_enemy() -> void:
+	velocity = Vector2.ZERO
+	if not is_being_shrunk:
+		sprite.flip_h = false
+
+func _process_fat_demon_king(delta: float) -> void:
+	_process_stationary_enemy()
+	# 常驻机关：首次进入时生成一个平台（右侧停着静止铁球），平行状态（Rotation = 0）。
+	_ensure_fdk_mechanism()
+	# 冷却持续递减，不因攻击动画或铁球仍在滚动而暂停——
+	# 攻击过程（动画 / 铁球滚动）不计入“每 5 秒一次”的累积，固定每 5 秒发动一次新攻击。
+	_fdk_attack_cooldown -= delta
+	if _fdk_attack_cooldown <= 0.0:
+		# Attack3 首发，之后 Attack1 → Attack2 → Attack3 轮流施展。攻击开始时立即重置冷却，
+		# 使下一次攻击在“本次开始后 5 秒”触发（攻击动画时长不计入间隔）。
+		_fdk_attack_cooldown = FDK_ATTACK_INTERVAL
+		match _fdk_next_attack:
+			1:
+				if not _fdk_attack2_frames.is_empty():
+					_enter_fdk_attack2_state()
+				else:
+					_enter_fdk_attack_state()
+			2:
+				if not _fdk_attack3_frames.is_empty():
+					_enter_fdk_attack3_state()
+				else:
+					_enter_fdk_attack_state()
+			_:
+				_enter_fdk_attack_state()
+	if anim_state == AnimState.FDK_ATTACK:
+		_tick_fdk_attack(delta)
+	elif anim_state == AnimState.FDK_ATTACK2:
+		_tick_fdk_attack2(delta)
+	elif anim_state == AnimState.FDK_ATTACK3:
+		_tick_fdk_attack3(delta)
 
 func _process_walking_enemy(delta: float) -> void:
 	velocity.y += GRAVITY * delta
@@ -785,10 +1061,21 @@ func _process_walking_enemy(delta: float) -> void:
 	else:
 		# When being sucked, we apply some friction to the Y axis to simulate air resistance
 		pass
-		
+
+	var wall_direction := direction
+	var turned_early := false
+	if is_on_floor() and abs(velocity.x) > 0.0 and _has_wall_ahead():
+		direction = -direction
+		if velocity.x != 0.0:
+			velocity.x = abs(velocity.x) * direction
+		turned_early = true
+
 	move_and_slide()
 	if is_on_wall():
-		direction = -direction
+		# 先轻微推出碰撞面，再反向；否则在窄平台边缘会来回抖动卡住。
+		global_position.x -= wall_direction * WALL_REBOUND_NUDGE
+		if not turned_early:
+			direction = -direction
 	if is_on_floor() and not _has_ground_ahead():
 		direction = -direction
 	# 被吸状态下 flip_h 与纹理由 _apply_capture_texture 接管，不在此覆盖
@@ -964,6 +1251,7 @@ func _get_body_width() -> float:
 		Type.RED_GHOST:     return CharTuning.rg_col_width
 		Type.RED_DEVIL:     return CharTuning.rd_col_width
 		Type.PALACE_ZOMBIE: return CharTuning.pz_col_width
+		Type.FAT_DEMON_KING: return CharTuning.fdk_col_width * CharTuning.fdk_col_scale
 		_:                  return 60.0
 
 func _exit_dash_to_walk() -> void:
@@ -1163,7 +1451,7 @@ func _on_mh_hammer_hit_player(body: Node) -> void:
 # 收尾：销毁锤节点，回到 WALK 状态
 func _exit_mh_attack_to_walk() -> void:
 	if _mh_hammer_node != null and is_instance_valid(_mh_hammer_node):
-		_mh_hammer_node.queue_free()
+		_mh_hammer_node.call_deferred("queue_free")
 	_mh_hammer_node = null
 	_mh_hammer_area = null
 	anim_state = AnimState.WALK
@@ -1173,6 +1461,469 @@ func _exit_mh_attack_to_walk() -> void:
 	if not _frames.is_empty():
 		_apply_normal_texture(_frames[0], "move")
 
+# ───────── 胖魔王机关攻击（Mechanism 平台 + 铁球） ─────────
+
+func _enter_fdk_attack_state() -> void:
+	anim_state = AnimState.FDK_ATTACK
+	_fdk_attack_accum = 0.0
+	_fdk_attack_frame_idx = 0
+	velocity = Vector2.ZERO
+	# 下一次出招改用 Attack2（Attack1 → Attack2 → Attack3 轮流）。
+	_fdk_next_attack = 1
+	if not _fdk_attack_frames.is_empty():
+		_apply_normal_texture(_fdk_attack_frames[0], "fdk_attack")
+	# Attack1：攻击动画开始 1 秒后，机关才从平行(0°)旋转到 F1 设置的角度，
+	# 随后铁球顺着倾斜角度滚落。
+	GameState.wait(self, FDK_ATTACK_TILT_DELAY).connect(_trigger_fdk_mechanism_tilt)
+
+# Attack2：与 Attack1 交替施展。当前仅播放 22 帧攻击动画，暂无机关/铁球等实际攻击效果，
+# 后续可在此处补充 Attack2 施展后引发的实际攻击逻辑。
+func _enter_fdk_attack2_state() -> void:
+	anim_state = AnimState.FDK_ATTACK2
+	_fdk_attack_accum = 0.0
+	_fdk_attack_frame_idx = 0
+	velocity = Vector2.ZERO
+	# 下一次出招改用 Attack3（Attack1 → Attack2 → Attack3 轮流）。
+	_fdk_next_attack = 2
+	if not _fdk_attack2_frames.is_empty():
+		_apply_normal_texture(_fdk_attack2_frames[0], "fdk_attack2")
+
+func _tick_fdk_attack2(delta: float) -> void:
+	if _fdk_attack2_frames.is_empty():
+		_exit_fdk_attack_to_idle()
+		return
+	_fdk_attack_accum += delta
+	while _fdk_attack_accum >= FDK_ATTACK_FRAME_INTERVAL:
+		_fdk_attack_accum -= FDK_ATTACK_FRAME_INTERVAL
+		_fdk_attack_frame_idx += 1
+		if _fdk_attack_frame_idx >= _fdk_attack2_frames.size():
+			# Attack2 动画播完（收招）：延迟 1 秒后从屏幕上方落下炮弹砸向钟馗。
+			_schedule_fdk_artillery_shell()
+			_exit_fdk_attack_to_idle()
+			return
+		_apply_normal_texture(_fdk_attack2_frames[_fdk_attack_frame_idx], "fdk_attack2")
+
+# Attack2 收招后：延迟 FDK_ATTACK2_SHELL_DELAY 秒，再生成下落炮弹。
+func _schedule_fdk_artillery_shell() -> void:
+	if is_captured or dying or is_in_flight:
+		return
+	GameState.wait(self, FDK_ATTACK2_SHELL_DELAY).connect(_spawn_fdk_artillery_shell)
+
+# 在钟馗当前水平位置的正上方（屏幕外）生成炮弹，直线落下砸向钟馗，命中扣 1 血。
+func _spawn_fdk_artillery_shell() -> void:
+	if not is_inside_tree():
+		return
+	var parent_node := get_parent()
+	if parent_node == null:
+		return
+	var scene := _cached_load(FDK_ARTILLERY_SHELL_SCENE) as PackedScene
+	if scene == null:
+		return
+	# 锁定钟馗当前 X：炮弹从其正上方落下。找不到玩家则以屏幕中心兜底。
+	var target_x: float = get_viewport().get_visible_rect().size.x * 0.5
+	var player := get_tree().get_first_node_in_group("player")
+	if player != null and is_instance_valid(player) and player is Node2D:
+		target_x = (player as Node2D).global_position.x
+	var shell = scene.instantiate()
+	parent_node.add_child(shell)
+	if shell is Node2D:
+		(shell as Node2D).global_position = Vector2(target_x, FDK_ARTILLERY_SHELL_SPAWN_Y)
+
+# Attack3：胖魔王拍手——播放拍手动画，拍手到位时从画面上方降落 6 个随机种类的敌人，
+# 随机分布到上层平台 / 中层平台 / 地面三层。降落敌人不计入通关数（走 spawn_summoned_enemy 旁路）。
+func _enter_fdk_attack3_state() -> void:
+	anim_state = AnimState.FDK_ATTACK3
+	_fdk_attack_accum = 0.0
+	_fdk_attack_frame_idx = 0
+	_fdk_attack3_summoned = false
+	velocity = Vector2.ZERO
+	# 下一次出招改回 Attack1（Attack1 → Attack2 → Attack3 轮流）。
+	_fdk_next_attack = 0
+	if not _fdk_attack3_frames.is_empty():
+		_apply_normal_texture(_fdk_attack3_frames[0], "fdk_attack3")
+
+func _tick_fdk_attack3(delta: float) -> void:
+	if _fdk_attack3_frames.is_empty():
+		_exit_fdk_attack_to_idle()
+		return
+	_fdk_attack_accum += delta
+	while _fdk_attack_accum >= FDK_ATTACK_FRAME_INTERVAL:
+		_fdk_attack_accum -= FDK_ATTACK_FRAME_INTERVAL
+		_fdk_attack_frame_idx += 1
+		if _fdk_attack_frame_idx >= _fdk_attack3_frames.size():
+			_exit_fdk_attack_to_idle()
+			return
+		# 拍手到位的那一帧触发敌人降落（仅触发一次）。
+		if not _fdk_attack3_summoned and _fdk_attack_frame_idx >= FDK_ATTACK3_SUMMON_FRAME:
+			_fdk_attack3_summoned = true
+			_summon_fdk_falling_enemies()
+		_apply_normal_texture(_fdk_attack3_frames[_fdk_attack_frame_idx], "fdk_attack3")
+
+# 从画面上方降落 FDK_ATTACK3_SUMMON_COUNT 个随机敌人，均衡分布到 上层 / 中层 / 地面 三层。
+#
+# 之前的实现把所有敌人都从同一个固定 X 区间（260~1650）、固定 Y=-160 自由落下，
+# 由重力决定落点。但 Stage3 上层平台横向覆盖了该 X 区间的全部范围（约 220~1890），
+# 任何从上方落下的敌人都会先撞到上层平台，所以全部堆在上层，永远到不了中层/地面。
+#
+# 现在改为：从关卡实际几何 level.get_platforms() 取出所有平台（与敌人同一世界坐标系），
+# 按表面高度 top_y 归类成 上层 / 中层 / 地面 三个落点组，
+# 每个敌人轮换选一个落点组、组内随机选一块平台，并在该平台横向范围内随机取 X，
+# 然后从“该平台表面正上方一小段”落下 —— 由于起点已在上层平台之下，重力直接把它带到目标层。
+func _summon_fdk_falling_enemies() -> void:
+	if is_captured or dying or is_in_flight:
+		return
+	var level := _find_level()
+	if level == null or not level.has_method("spawn_summoned_enemy"):
+		return
+	if _fdk_summon_scenes.is_empty():
+		for path in FDK_SUMMON_SCENE_PATHS:
+			var s := _cached_load(path) as PackedScene
+			if s != null:
+				_fdk_summon_scenes.append(s)
+	if _fdk_summon_scenes.is_empty():
+		return
+	# tiers[0]=上层 tiers[1]=中层 tiers[2]=地面，每个元素是该层若干平台记录 {top_y,left_x,right_x}。
+	var tiers := _build_fdk_attack3_tiers(level)
+	for i in range(FDK_ATTACK3_SUMMON_COUNT):
+		var scene: PackedScene = _fdk_summon_scenes[randi() % _fdk_summon_scenes.size()]
+		# 轮换 + 随机起点：保证三层都能分到敌人，又不至于每次都固定顺序。
+		var tier_index := (i + _fdk_attack3_band_offset) % tiers.size()
+		var tier: Array = tiers[tier_index]
+		if tier.is_empty():
+			continue
+		var plat: Dictionary = tier[randi() % tier.size()]
+		var lo: float = float(plat["left_x"]) + FDK_ATTACK3_LANDING_EDGE_MARGIN
+		var hi: float = float(plat["right_x"]) - FDK_ATTACK3_LANDING_EDGE_MARGIN
+		if hi < lo:
+			# 平台太窄，退回用中心。
+			lo = float(plat["center_x"]) if plat.has("center_x") else (float(plat["left_x"]) + float(plat["right_x"])) * 0.5
+			hi = lo
+		# 从目标平台表面上方一小段落下：起点已位于上层平台之下，避免被上层平台拦截。
+		var spawn_y := float(plat["top_y"]) - FDK_ATTACK3_DROP_HEIGHT
+		var spawn_x := _pick_fdk_attack3_spawn_x(lo, hi, spawn_y)
+		var enemy_node: Node = level.spawn_summoned_enemy(scene, Vector2(spawn_x, spawn_y))
+		if enemy_node is Enemy:
+			var enemy := enemy_node as Enemy
+			var center_x := float(plat.get("center_x", spawn_x))
+			# 第二层平台左侧更容易和墙角/边缘挤住，所以这层优先往右走；
+			# 其他层则按出生点位于平台中心线的哪一侧，先朝更宽松的一边移动。
+			if tier_index == 1:
+				enemy.direction = 1
+			else:
+				enemy.direction = 1 if spawn_x < center_x else -1
+	_fdk_attack3_band_offset = (_fdk_attack3_band_offset + 1) % 3
+
+func _pick_fdk_attack3_spawn_x(lo: float, hi: float, spawn_y: float) -> float:
+	var player := get_tree().get_first_node_in_group("player")
+	if player == null or not is_instance_valid(player) or not (player is Node2D):
+		return randf_range(lo, hi)
+	var player_pos: Vector2 = (player as Node2D).global_position
+	if abs(spawn_y - player_pos.y) > FDK_ATTACK3_PLAYER_SAFE_Y:
+		return randf_range(lo, hi)
+
+	var best_x: float = randf_range(lo, hi)
+	var best_dist: float = abs(best_x - player_pos.x)
+	for _attempt in range(FDK_ATTACK3_SPAWN_PICK_ATTEMPTS):
+		var candidate_x: float = randf_range(lo, hi)
+		var dist: float = abs(candidate_x - player_pos.x)
+		if dist >= FDK_ATTACK3_PLAYER_SAFE_X:
+			return candidate_x
+		if dist > best_dist:
+			best_x = candidate_x
+			best_dist = dist
+	return best_x
+
+# 把关卡所有平台/地面按表面高度 top_y 归类成 上层 / 中层 / 地面 三层。
+# 数据来自 level.get_platforms()（真实关卡几何，与敌人同一世界坐标系）：
+# 收集所有不同的 top_y 值并排序，最小的一档为上层、最大的一档为地面、其余归中层。
+# 返回 [上层平台数组, 中层平台数组, 地面平台数组]，每块平台为含 top_y/left_x/right_x/center_x 的字典。
+func _build_fdk_attack3_tiers(level: Node) -> Array:
+	var plats: Array = []
+	if level.has_method("get_platforms"):
+		for p in level.get_platforms():
+			if p is Dictionary and p.has("top_y") and p.has("left_x") and p.has("right_x"):
+				if float(p["right_x"]) - float(p["left_x"]) >= 1.0:
+					plats.append(p)
+	if plats.is_empty():
+		# 没拿到关卡几何时的兜底：用 Attack1 铁球轨道常量构造三层（同一世界坐标系）。
+		return [
+			[{"top_y": FDK_TRACK_UPPER_Y, "left_x": FDK_TRACK_UPPER_LANDING_MIN_X, "right_x": FDK_TRACK_UPPER_LANDING_MAX_X}],
+			[{"top_y": FDK_TRACK_MIDDLE_Y, "left_x": FDK_TRACK_MIDDLE_LEFT_X, "right_x": FDK_TRACK_MIDDLE_RIGHT_X}],
+			[{"top_y": FDK_TRACK_GROUND_Y, "left_x": FDK_ATTACK3_SPAWN_X_MIN, "right_x": FDK_ATTACK3_SPAWN_X_MAX}],
+		]
+	# 收集所有不同的表面高度并排序（由高到低：上层 top_y 最小，地面最大）。
+	var ys: Array = []
+	for p in plats:
+		var y: float = float(p["top_y"])
+		var found := false
+		for ey in ys:
+			if abs(ey - y) <= FDK_ATTACK3_TIER_Y_TOLERANCE:
+				found = true
+				break
+		if not found:
+			ys.append(y)
+	ys.sort()
+	var upper_y: float = ys[0]
+	var ground_y: float = ys[ys.size() - 1]
+	var upper: Array = []
+	var middle: Array = []
+	var ground: Array = []
+	for p in plats:
+		var y: float = float(p["top_y"])
+		if abs(y - upper_y) <= FDK_ATTACK3_TIER_Y_TOLERANCE:
+			upper.append(p)
+		elif abs(y - ground_y) <= FDK_ATTACK3_TIER_Y_TOLERANCE:
+			ground.append(p)
+		else:
+			middle.append(p)
+	# 若中层为空（只识别出两档），把地面的一部分让给中层不合适；保持空即由轮换跳过。
+	return [upper, middle, ground]
+
+# 向上查找所在的 Level 节点（用于调用 spawn_summoned_enemy）。
+func _find_level() -> Node:
+	var n: Node = get_parent()
+	while n != null:
+		if n is Level:
+			return n
+		n = n.get_parent()
+	return null
+
+func _tick_fdk_attack(delta: float) -> void:
+	if _fdk_attack_frames.is_empty():
+		_exit_fdk_attack_to_idle()
+		return
+	_fdk_attack_accum += delta
+	while _fdk_attack_accum >= FDK_ATTACK_FRAME_INTERVAL:
+		_fdk_attack_accum -= FDK_ATTACK_FRAME_INTERVAL
+		_fdk_attack_frame_idx += 1
+		if _fdk_attack_frame_idx >= _fdk_attack_frames.size():
+			_exit_fdk_attack_to_idle()
+			return
+		_apply_normal_texture(_fdk_attack_frames[_fdk_attack_frame_idx], "fdk_attack")
+
+func _exit_fdk_attack_to_idle() -> void:
+	anim_state = AnimState.IDLE
+	# 冷却已在攻击开始时重置；此处不再重置，确保攻击动画时长不计入下一次攻击的 5 秒间隔。
+	state_timer = 0.0
+	state_duration = IDLE_DURATION_MIN
+	anim_frame = 0
+	if not _idle_frames.is_empty():
+		_apply_normal_texture(_idle_frames[0], "idle")
+
+# 确保常驻机关平台存在（首次进入 FDK 处理时创建），平行状态，右侧停一颗静止铁球。
+func _ensure_fdk_mechanism() -> void:
+	if _fdk_mechanism != null and is_instance_valid(_fdk_mechanism):
+		return
+	if is_captured or dying or is_in_flight:
+		return
+	var parent_node := get_parent()
+	if parent_node == null:
+		return
+	var platform := Node2D.new()
+	platform.name = "FatDemonKingMechanism"
+	platform.z_index = 50
+	var pivot_node := Node2D.new()
+	pivot_node.name = "MechanismPivot"
+	var sprite_node := Sprite2D.new()
+	sprite_node.name = "MechanismSprite"
+	sprite_node.texture = _load_fdk_mechanism_texture()
+	pivot_node.add_child(sprite_node)
+	# 静止展示用铁球：停在机关（平台）右侧，随机关一起旋转。
+	var rest_ball := Sprite2D.new()
+	rest_ball.name = "RestIronBall"
+	rest_ball.texture = _load_fdk_iron_ball_texture()
+	rest_ball.scale = Vector2(FDK_IRON_BALL_REST_SCALE, FDK_IRON_BALL_REST_SCALE)
+	rest_ball.z_index = 1
+	pivot_node.add_child(rest_ball)
+	platform.add_child(pivot_node)
+	parent_node.add_child(platform)
+	_fdk_mechanism = platform
+	_fdk_mechanisms.append(platform)
+	_apply_fdk_mechanism_tuning(platform)
+
+# Attack 时触发：机关旋转到 F1 角度 → 释放滚动铁球 → 机关复位平行。
+func _trigger_fdk_mechanism_tilt() -> void:
+	# 0.5 秒延迟期间若被捕获 / 死亡 / 飞行中，则取消本次倾斜。
+	if is_captured or dying or is_in_flight:
+		return
+	_ensure_fdk_mechanism()
+	if _fdk_mechanism == null or not is_instance_valid(_fdk_mechanism):
+		return
+	var pivot_node := _fdk_mechanism.get_node_or_null("MechanismPivot") as Node2D
+	if pivot_node == null:
+		return
+	# 上一次的倾斜→停留→复位时序尚未结束 → 跳过，避免叠加 tween 造成角度冲突。
+	if _fdk_mechanism_tilted:
+		return
+	var base_rot := _fdk_mechanism_base_rotation()
+	var tilt_rot := base_rot + CharTuning.fdk_mechanism_rotation
+	# 标记为倾斜状态。复位时机由下面的 tween 链固定控制（倾斜0.5秒→停留2秒→复位1秒）。
+	_fdk_mechanism_tilted = true
+	# 倾斜到位后再放球（独立定时器触发，不占用主时序 tween 链）。
+	GameState.wait(self, FDK_MECHANISM_TILT_TIME + FDK_BALL_RELEASE_DELAY).connect(_release_fdk_iron_ball)
+	# 一条 tween 串起完整时序：倾斜(0.5s) → 停留(2s) → 复位(1s) → 恢复静止铁球。
+	var tween := _fdk_mechanism.create_tween()
+	# 1) 旋转到倾斜角度，耗时 0.5 秒
+	tween.tween_property(pivot_node, "rotation_degrees", tilt_rot, FDK_MECHANISM_TILT_TIME)
+	# 2) 倾斜到位后停留 2 秒
+	tween.tween_interval(FDK_MECHANISM_TILT_HOLD_TIME)
+	# 3) 旋转回平行(0°)，耗时 1 秒
+	tween.tween_property(pivot_node, "rotation_degrees", base_rot, FDK_MECHANISM_RESET_TIME)
+	# 4) 复位完成：恢复静止展示铁球，并清除倾斜标记
+	tween.tween_callback(_on_fdk_tilt_sequence_finished)
+
+# 机关在平行状态下 pivot 的基础旋转角度（仅由 F1 摆放，不含 Attack 倾斜量）。
+func _fdk_mechanism_base_rotation() -> float:
+	return 0.0
+
+# 倾斜→停留→复位的完整 tween 链结束：清除倾斜标记并恢复静止展示铁球。
+func _on_fdk_tilt_sequence_finished() -> void:
+	_fdk_mechanism_tilted = false
+	_restore_fdk_rest_ball()
+
+# 释放一颗真正会滚动的铁球，按三层平台路径匀速滚动；同时隐藏静止展示球。
+func _release_fdk_iron_ball() -> void:
+	if _fdk_mechanism == null or not is_instance_valid(_fdk_mechanism):
+		return
+	var parent_node := get_parent()
+	if parent_node == null:
+		return
+	var pivot_node := _fdk_mechanism.get_node_or_null("MechanismPivot") as Node2D
+	var rest_ball: Sprite2D = null
+	var spawn_pos := _fdk_mechanism.global_position
+	if pivot_node != null:
+		rest_ball = pivot_node.get_node_or_null("RestIronBall") as Sprite2D
+		if rest_ball != null:
+			spawn_pos = rest_ball.global_position
+			rest_ball.visible = false
+	var scene := _cached_load(FDK_IRON_BALL_SCENE) as PackedScene
+	if scene == null:
+		return
+	var ball = scene.instantiate()
+	# 铁球场景默认 z_index = -10 会被关卡背景遮挡 → 强制提到机关之上，确保滚动可见。
+	if ball is CanvasItem:
+		(ball as CanvasItem).z_index = 51
+	parent_node.add_child(ball)
+	_fdk_active_ball = ball
+	if ball.has_method("launch_path"):
+		ball.launch_path(_build_fdk_track(spawn_pos), 0.0)
+	# 机关复位时机由倾斜 tween 链固定控制（倾斜0.5s→停留2s→复位1s），与铁球滚动相互独立。
+	# 铁球滚出画面后自行 queue_free，不再参与机关复位。
+
+# 构建三层滚动路径：机关左侧斜面滑下 → 上层平台(向左滚至左端终点) → 中层平台(向右滚至右端终点)
+# → 下层地面(向左滚出画面)。所有坐标取自 Stage3 关卡几何，铁球匀速滚动。
+func _build_fdk_track(spawn_pos: Vector2) -> Array:
+	var radius := IronBall.COLLISION_SIZE * IronBall.BALL_SCALE * 0.5
+	var upper_y := FDK_TRACK_UPPER_Y - radius
+	var middle_y := FDK_TRACK_MIDDLE_Y - radius
+	var ground_y := FDK_TRACK_GROUND_Y - radius
+	# 着陆点位于机关左下方：从 spawn X 向左偏移，并钳制在上层平台有效区间内。
+	var landing_x: float = clampf(
+		spawn_pos.x + FDK_TRACK_UPPER_LANDING_DX,
+		FDK_TRACK_UPPER_LANDING_MIN_X,
+		FDK_TRACK_UPPER_LANDING_MAX_X
+	)
+	var points: Array = []
+	points.append(spawn_pos)                                          # 机关左侧起点（铁球停靠处）
+	points.append(Vector2(landing_x, upper_y))                        # 沿左侧斜面向左下滑落到上层平台
+	points.append(Vector2(FDK_TRACK_UPPER_LEFT_X, upper_y))           # 上层平台向左滚到左端终点
+	points.append(Vector2(FDK_TRACK_UPPER_LEFT_X, middle_y))          # 从上层终点掉到中层平台
+	points.append(Vector2(FDK_TRACK_MIDDLE_RIGHT_X, middle_y))        # 中层平台向右滚到右端终点
+	points.append(Vector2(FDK_TRACK_MIDDLE_RIGHT_X, ground_y))        # 从中层终点掉到下层地面
+	points.append(Vector2(FDK_TRACK_GROUND_EXIT_X, ground_y))         # 下层地面向左滚出画面
+	return points
+
+func _restore_fdk_rest_ball() -> void:
+	if _fdk_mechanism == null or not is_instance_valid(_fdk_mechanism):
+		return
+	var pivot_node := _fdk_mechanism.get_node_or_null("MechanismPivot") as Node2D
+	if pivot_node == null:
+		return
+	var rest_ball := pivot_node.get_node_or_null("RestIronBall") as Sprite2D
+	if rest_ball != null:
+		rest_ball.visible = true
+
+static func _load_fdk_mechanism_texture() -> Texture2D:
+	if _fdk_mechanism_texture_cache != null:
+		return _fdk_mechanism_texture_cache
+	_fdk_mechanism_texture_cache = _cached_load(FDK_MECHANISM_TEXTURE) as Texture2D
+	if _fdk_mechanism_texture_cache == null:
+		push_warning("Failed to load FDK mechanism PNG: %s" % FDK_MECHANISM_TEXTURE)
+		return null
+	return _fdk_mechanism_texture_cache
+
+static func _load_fdk_iron_ball_texture() -> Texture2D:
+	return _cached_load(FDK_IRON_BALL_TEXTURE) as Texture2D
+
+static func _cached_load(path: String) -> Resource:
+	if _resource_cache.has(path):
+		return _resource_cache[path]
+	var res := load(path)
+	_resource_cache[path] = res
+	return res
+
+static func _get_cached_frame_list(paths: Array) -> Array:
+	var key := _frame_cache_key(paths)
+	if _frame_cache.has(key):
+		return _frame_cache[key]
+	var frames: Array = []
+	for path in paths:
+		var tex := _cached_load(str(path)) as Texture2D
+		if tex != null:
+			frames.append(tex)
+	_frame_cache[key] = frames
+	return frames
+
+static func _frame_cache_key(paths: Array) -> String:
+	var key := ""
+	for path in paths:
+		key += str(path)
+		key += "|"
+	return key
+
+# 机关平台的摆放与旋转支点（平行状态）。Mechanism Pivot X/Y 是旋转支点，
+# Mechanism Pos X/Y 是平台贴图相对支点的位置，Mechanism Rotation 是 Attack1 倾斜角。
+func _apply_fdk_mechanism_tuning(platform: Node) -> void:
+	if not platform is Node2D:
+		return
+	var platform_2d := platform as Node2D
+	platform_2d.rotation_degrees = 0.0
+	# 机关整体锚定在“屏幕中心”的世界坐标，与 F1 调参预览(CanvasLayer 居中)保持同一坐标系，
+	# 这样 F1 调好的 Pivot / Pos / Rotation 值在运行时落点与预览完全一致（否则会偏出屏幕）。
+	# 本游戏无 Camera2D，世界坐标 == 屏幕坐标，屏幕中心即视口尺寸的一半。
+	platform_2d.global_position = get_viewport().get_visible_rect().size * 0.5
+	var pivot_node := platform_2d.get_node_or_null("MechanismPivot") as Node2D
+	if pivot_node == null:
+		return
+	pivot_node.position = Vector2(CharTuning.fdk_mechanism_pivot_x, CharTuning.fdk_mechanism_pivot_y)
+	# 仅在机关处于平行(未倾斜)时由调参直接写入旋转；倾斜过程由 tween 接管。
+	if anim_state != AnimState.FDK_ATTACK and (_fdk_active_ball == null or not is_instance_valid(_fdk_active_ball)):
+		pivot_node.rotation_degrees = _fdk_mechanism_base_rotation()
+	var sprite_node := pivot_node.get_node_or_null("MechanismSprite") as Sprite2D
+	if sprite_node == null:
+		return
+	sprite_node.position = Vector2(CharTuning.fdk_mechanism_pos_x, CharTuning.fdk_mechanism_pos_y) - pivot_node.position
+	var s: float = max(0.01, CharTuning.fdk_mechanism_scale)
+	sprite_node.scale = Vector2(s, s)
+	sprite_node.offset = Vector2.ZERO
+	# 静止铁球停在机关平台左侧（贴图左端附近、表面之上）。机关倾斜时铁球从左侧斜面滑下。
+	# 铁球美术大小跟随 F1 的“铁球美术大小”实时调整。
+	var rest_ball := pivot_node.get_node_or_null("RestIronBall") as Sprite2D
+	if rest_ball != null and sprite_node.texture != null:
+		var ball_scale: float = max(0.01, CharTuning.fdk_ball_scale)
+		rest_ball.scale = Vector2(ball_scale, ball_scale)
+		var half_w := sprite_node.texture.get_width() * 0.5 * s
+		var ball_r := IronBall.COLLISION_SIZE * 0.5 * ball_scale
+		var rest_offset := Vector2(CharTuning.fdk_ball_rest_offset_x, CharTuning.fdk_ball_rest_offset_y)
+		rest_ball.position = sprite_node.position + Vector2(-half_w * 0.7, -ball_r) + rest_offset
+
+func _get_viewport_center_global() -> Vector2:
+	var camera := get_viewport().get_camera_2d()
+	if camera != null:
+		return camera.get_screen_center_position()
+	var screen_center := get_viewport().get_visible_rect().size * 0.5
+	return get_viewport().get_canvas_transform().affine_inverse() * screen_center
+
 # ───────── 火种生成（PalaceZombie ATTACK 状态用） ─────────
 
 # 生成两枚火种，朝僵尸面向方向滑行（一前一后）
@@ -1180,7 +1931,7 @@ func _spawn_fire_seeds() -> void:
 	# 已被捕获/死亡 → 不再生成火种（防止 ATTACK 中途被吸进葫芦后还产生火种）
 	if is_captured or dying or is_in_flight:
 		return
-	var scene := load(FIRE_SEED_SCENE)
+	var scene := _cached_load(FIRE_SEED_SCENE)
 	if scene == null:
 		return
 	# 把火种挂在父节点（与 ball.gd 同级），让它独立于僵尸生命周期
@@ -1222,13 +1973,56 @@ func _has_ground_ahead() -> bool:
 			col_h = CharTuning.pz_col_height
 			col_ox = CharTuning.pz_col_offset_x
 			col_oy = CharTuning.pz_col_offset_y
+		Type.FAT_DEMON_KING:
+			col_w = CharTuning.fdk_col_width * CharTuning.fdk_col_scale
+			col_h = CharTuning.fdk_col_height * CharTuning.fdk_col_scale
+			col_ox = CharTuning.fdk_col_offset_x
+			col_oy = CharTuning.fdk_col_offset_y
 	# 射线起点：贴在 collision 底部边缘外侧
-	ground_check.position.x = col_ox + (col_w / 2.0 + 4.0) * direction
+	ground_check.position.x = col_ox + (col_w / 2.0 + PLATFORM_EDGE_LOOKAHEAD) * direction
 	ground_check.position.y = col_oy + col_h / 2.0 - 4.0
 	# 射线终点：从起点向下 30 像素（覆盖典型 tile 高度 10 + 缓冲）
 	ground_check.target_position = Vector2(0, 30.0)
 	ground_check.force_raycast_update()
 	return ground_check.is_colliding()
+
+func _has_wall_ahead() -> bool:
+	# 提前探测前方障碍，避免敌人把身体推进窄平台夹缝里再回不来。
+	var col_w := 60.0
+	var col_h := 70.0
+	var col_ox := 0.0
+	var col_oy := 5.0
+	match enemy_type:
+		Type.METEOR_HAMMER:
+			col_w = CharTuning.mh_col_width
+			col_h = CharTuning.mh_col_height
+			col_ox = CharTuning.mh_col_offset_x
+			col_oy = CharTuning.mh_col_offset_y
+		Type.RED_GHOST:
+			col_w = CharTuning.rg_col_width
+			col_h = CharTuning.rg_col_height
+			col_ox = CharTuning.rg_col_offset_x
+			col_oy = CharTuning.rg_col_offset_y
+		Type.RED_DEVIL:
+			col_w = CharTuning.rd_col_width
+			col_h = CharTuning.rd_col_height
+			col_ox = CharTuning.rd_col_offset_x
+			col_oy = CharTuning.rd_col_offset_y
+		Type.PALACE_ZOMBIE:
+			col_w = CharTuning.pz_col_width
+			col_h = CharTuning.pz_col_height
+			col_ox = CharTuning.pz_col_offset_x
+			col_oy = CharTuning.pz_col_offset_y
+		Type.FAT_DEMON_KING:
+			col_w = CharTuning.fdk_col_width * CharTuning.fdk_col_scale
+			col_h = CharTuning.fdk_col_height * CharTuning.fdk_col_scale
+			col_ox = CharTuning.fdk_col_offset_x
+			col_oy = CharTuning.fdk_col_offset_y
+	wall_check.position.x = col_ox + (col_w / 2.0 + 4.0) * direction
+	wall_check.position.y = col_oy
+	wall_check.target_position = Vector2(PLATFORM_EDGE_LOOKAHEAD * direction, 0.0)
+	wall_check.force_raycast_update()
+	return wall_check.is_colliding()
 
 # ───────── 跨平台跳跃（HOP） ─────────
 # 懒加载：向上查找含 get_platforms 方法的祖先节点（即 Level）
@@ -1346,7 +2140,10 @@ func freeze_for_suction(_vanish_world: Vector2 = Vector2.INF) -> void:
 	if is_captured or dying:
 		return
 	# 被吸住的流星锤攻击元素可反打 Boss：吸到锤子时按一次命中处理。
-	if anim_state == AnimState.MH_ATTACK and _mh_hammer_area != null and is_instance_valid(_mh_hammer_area):
+	if anim_state == AnimState.MH_ATTACK \
+			and _mh_hammer_area != null \
+			and is_instance_valid(_mh_hammer_area) \
+			and _mh_hammer_area.monitoring:
 		for body in _mh_hammer_area.get_overlapping_bodies():
 			if body is Boss and not body.dying:
 				body.take_damage(1)
@@ -1404,7 +2201,7 @@ func reset_suction_shrink() -> void:
 	var base: float = _get_base_sprite_scale()
 	sprite.scale = Vector2(base, base)
 	# 复位 sprite.position（被吸过程可能朝消失点偏移了）
-	sprite.position = _orig_sprite_position
+	sprite.position = _get_base_sprite_offset()
 	_restore_idle_texture()
 
 # 把 sprite 切回 idle 动画帧（用于退出被吸/冻结状态）
@@ -1448,9 +2245,9 @@ func _apply_capture_texture() -> void:
 		var tex_value = TEX[enemy_type][key]
 		if tex_value is Array:
 			for path in tex_value:
-				_capture_frames.append(load(path))
+				_capture_frames.append(_cached_load(path))
 		else:
-			_capture_frames.append(load(tex_value))
+			_capture_frames.append(_cached_load(tex_value))
 		_capture_frame_idx = 0
 	if not _capture_frames.is_empty():
 		sprite.texture = _capture_frames[_capture_frame_idx]
@@ -1519,8 +2316,25 @@ func _get_base_sprite_scale() -> float:
 			return CharTuning.rd_sprite_scale
 		Type.PALACE_ZOMBIE:
 			return CharTuning.pz_sprite_scale
+		Type.FAT_DEMON_KING:
+			return CharTuning.fdk_sprite_scale
 		_:
 			return 1.0
+
+func _get_base_sprite_offset() -> Vector2:
+	match enemy_type:
+		Type.METEOR_HAMMER:
+			return Vector2(CharTuning.mh_sprite_offset_x, CharTuning.mh_sprite_offset_y)
+		Type.RED_GHOST:
+			return Vector2(0.0, CharTuning.rg_sprite_offset_y)
+		Type.RED_DEVIL:
+			return Vector2(0.0, CharTuning.rd_sprite_offset_y)
+		Type.PALACE_ZOMBIE:
+			return Vector2(0.0, CharTuning.pz_sprite_offset_y)
+		Type.FAT_DEMON_KING:
+			return Vector2(CharTuning.fdk_sprite_offset_x, CharTuning.fdk_sprite_offset_y)
+		_:
+			return Vector2.ZERO
 
 func apply_suction(dir: Vector2, force: float) -> void:
 	# dir / force 保留为参数兼容，但实际飞行路径用纯运动学位置插值（apply_suction_shrink 传入 vanish_world）
@@ -1560,26 +2374,49 @@ func become_captured() -> void:
 	# 被吸入葫芦后整个敌人节点隐藏（不再显示在钟馗旁边）
 	hide()
 
+func take_damage(amount: int = 1) -> void:
+	if dying:
+		return
+	health = max(0, health - amount)
+	if enemy_type == Type.FAT_DEMON_KING:
+		_notify_fat_demon_king_hud_update()
+	sprite.modulate = Color(1.0, 0.35, 0.35, 1.0)
+	var tween := create_tween()
+	tween.tween_property(sprite, "modulate", Color.WHITE, 0.12)
+	if health <= 0:
+		die()
+
 func die() -> void:
 	if dying:
 		return
 	dying = true
 	is_captured = true
+	if enemy_type == Type.FAT_DEMON_KING:
+		_notify_fat_demon_king_hud_hide()
 	# 保险：DASH VANISH 阶段中死亡 → 强制显示 sprite，避免死亡动画隐形播放
 	sprite.show()
 	# 保险：MH_ATTACK 中死亡 → 清理掉飞行的锤子（避免孤儿节点）
 	if _mh_hammer_node != null and is_instance_valid(_mh_hammer_node):
-		_mh_hammer_node.queue_free()
+		_mh_hammer_node.call_deferred("queue_free")
 		_mh_hammer_node = null
 		_mh_hammer_area = null
+	for mechanism in _fdk_mechanisms:
+		if is_instance_valid(mechanism):
+			mechanism.call_deferred("queue_free")
+	_fdk_mechanisms.clear()
+	_fdk_mechanism = null
+	# 死亡时不主动清滚动铁球（让其滚完/滚出画面自然消失，避免半路凭空消失）
+	_fdk_active_ball = null
+	# 机关已销毁 → 清掉倾斜标记。
+	_fdk_mechanism_tilted = false
 	GameState.add_score(SCORE_VALUES[enemy_type])
 	set_collision_layer_value(3, false)
 	anim_timer.stop()
 	var die_tex = TEX[enemy_type]["die"]
 	for i in range(die_tex.size()):
-		_apply_normal_texture(load(die_tex[i]), "die")
-		await get_tree().create_timer(0.1).timeout
-	queue_free()
+		_apply_normal_texture(_cached_load(die_tex[i]), "die")
+		await GameState.wait(self, 0.1)
+	call_deferred("queue_free")
 
 func _on_anim_tick() -> void:
 	# 处于 capture 状态（蓄力冻结 / 真正吸引）→ 推进 capture 序列帧（如果有多帧），
@@ -1595,8 +2432,8 @@ func _on_anim_tick() -> void:
 			_capture_frame_idx = (_capture_frame_idx + 1) % _capture_frames.size()
 			sprite.texture = _capture_frames[_capture_frame_idx]
 		return
-	# ATTACK / DASH / MH_ATTACK 状态：序列帧由各自的 tick 函数推进，跳过 AnimTimer 默认推进
-	if anim_state == AnimState.ATTACK or anim_state == AnimState.DASH or anim_state == AnimState.MH_ATTACK:
+	# ATTACK / DASH / MH_ATTACK / FDK_ATTACK / FDK_ATTACK2 / FDK_ATTACK3 状态：序列帧由各自的 tick 函数推进，跳过 AnimTimer 默认推进
+	if anim_state == AnimState.ATTACK or anim_state == AnimState.DASH or anim_state == AnimState.MH_ATTACK or anim_state == AnimState.FDK_ATTACK or anim_state == AnimState.FDK_ATTACK2 or anim_state == AnimState.FDK_ATTACK3:
 		return
 	# IDLE 状态：推进 idle 帧（独立于 walk 帧序列）
 	if anim_state == AnimState.IDLE:
@@ -1661,3 +2498,26 @@ func _tick_capture_custom_anim(delta: float) -> void:
 		_capture_anim_accum -= interval
 		_capture_frame_idx = (_capture_frame_idx + 1) % _capture_frames.size()
 		sprite.texture = _capture_frames[_capture_frame_idx]
+
+func _get_hud() -> Node:
+	var level := _find_level()
+	if level == null:
+		return null
+	if "ui" in level:
+		return level.ui
+	return null
+
+func _notify_fat_demon_king_hud_show() -> void:
+	var hud := _get_hud()
+	if hud != null and hud.has_method("show_fat_demon_king_bar"):
+		hud.show_fat_demon_king_bar(FAT_DEMON_KING_MAX_HEALTH)
+
+func _notify_fat_demon_king_hud_update() -> void:
+	var hud := _get_hud()
+	if hud != null and hud.has_method("update_fat_demon_king_health"):
+		hud.update_fat_demon_king_health(health)
+
+func _notify_fat_demon_king_hud_hide() -> void:
+	var hud := _get_hud()
+	if hud != null and hud.has_method("hide_fat_demon_king_bar"):
+		hud.hide_fat_demon_king_bar()

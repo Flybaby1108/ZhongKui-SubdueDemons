@@ -1,33 +1,61 @@
-[gd_scene load_steps=3 format=3 uid="uid://b7hud0001"]
+[gd_scene load_steps=6 format=3 uid="uid://b7hud0001"]
 
 [ext_resource type="Script" uid="uid://dudegrph5xgfp" path="res://scripts/hud.gd" id="1_hud"]
 [ext_resource type="Texture2D" path="res://assets/sprites/Icon/Coin.png" id="2_coin"]
+[ext_resource type="Texture2D" path="res://assets/sprites/Icon/YuanBao.png" id="3_yuanbao"]
+[ext_resource type="Texture2D" path="res://assets/sprites/Chapter_BG/Chapter_Countdown.png" id="4_countdown_bg"]
+[ext_resource type="Texture2D" path="res://assets/sprites/Chapter_BG/AvatarFrame.png" id="5_avatar"]
 
 [node name="HUD" type="CanvasLayer"]
 script = ExtResource("1_hud")
+
+[node name="CountdownBackground" type="TextureRect" parent="."]
+z_index = -1
+offset_left = 720.0
+offset_top = -11.0
+offset_right = 1020.0
+offset_bottom = 115.0
+mouse_filter = 2
+texture = ExtResource("4_countdown_bg")
+expand_mode = 1
+stretch_mode = 5
+
+[node name="AvatarFrame" type="TextureRect" parent="."]
+offset_left = 20.0
+offset_top = 94.0
+offset_right = 148.0
+offset_bottom = 222.0
+mouse_filter = 2
+texture = ExtResource("5_avatar")
+expand_mode = 1
+stretch_mode = 5
 
 [node name="TopBar" type="HBoxContainer" parent="."]
 offset_left = 20.0
 offset_top = 12.0
 offset_right = 1900.0
 offset_bottom = 80.0
-theme_override_constants/separation = 80
+theme_override_constants/separation = 50
 
-[node name="Hearts" type="HBoxContainer" parent="TopBar"]
+[node name="HeartCounter" type="Control" parent="TopBar"]
+custom_minimum_size = Vector2(280, 80)
+layout_mode = 2
+
+[node name="Hearts" type="HBoxContainer" parent="TopBar/HeartCounter"]
 custom_minimum_size = Vector2(280, 80)
 layout_mode = 2
 theme_override_constants/separation = 4
 
-[node name="StageLabel" type="Label" parent="TopBar"]
+[node name="CountdownCounter" type="Control" parent="TopBar"]
 custom_minimum_size = Vector2(300, 80)
 layout_mode = 2
-text = "STAGE 1"
-theme_override_font_sizes/font_size = 56
 
-[node name="TimeLabel" type="Label" parent="TopBar"]
+[node name="TimeLabel" type="Label" parent="TopBar/CountdownCounter"]
 custom_minimum_size = Vector2(300, 80)
 layout_mode = 2
-text = "TIME 90"
+text = "90"
+horizontal_alignment = 1
+vertical_alignment = 1
 theme_override_font_sizes/font_size = 56
 
 [node name="CoinCounter" type="Control" parent="TopBar"]
@@ -45,9 +73,17 @@ stretch_mode = 5
 layout_mode = 2
 theme_override_constants/separation = 0
 
-[node name="ScoreLabel" type="Label" parent="TopBar"]
-custom_minimum_size = Vector2(420, 80)
+[node name="YuanbaoCounter" type="Control" parent="TopBar"]
+custom_minimum_size = Vector2(260, 80)
 layout_mode = 2
-text = "SCORE 000000"
-horizontal_alignment = 2
-theme_override_font_sizes/font_size = 56
+
+[node name="Icon" type="TextureRect" parent="TopBar/YuanbaoCounter"]
+custom_minimum_size = Vector2(90, 58)
+layout_mode = 2
+texture = ExtResource("3_yuanbao")
+expand_mode = 1
+stretch_mode = 5
+
+[node name="Digits" type="HBoxContainer" parent="TopBar/YuanbaoCounter"]
+layout_mode = 2
+theme_override_constants/separation = 0

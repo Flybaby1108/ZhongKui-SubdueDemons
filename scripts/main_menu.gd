@@ -31,8 +31,8 @@ func _ready() -> void:
 	GameState.reset_game()
 	GameState.enable_start_sequence_music()
 	GameState.play_start_music_if_ready()
-	# 启动后台线程加载第一关
-	ResourceLoader.load_threaded_request(STAGE_1_PATH)
+	# 启动后台线程加载第一关（经 GameState 登记，退出时统一取回，避免泄漏）
+	GameState.request_threaded_load(STAGE_1_PATH)
 	# 优先复用 cg_intro 阶段已加载并 GPU 预热好的 BG 帧（autoload 共享缓存），
 	# 避免切场景瞬间再次同步 load 46 张 1920×1080 JPG 导致的 ~1 秒卡顿。
 	if not GameState.shared_start_bg_frames.is_empty():
@@ -48,6 +48,20 @@ func _ready() -> void:
 	# 标题位置/大小跟随 CharTuning（F1 调参面板可实时调节）
 	CharTuning.tuning_changed.connect(_apply_title_tuning)
 	_apply_title_tuning()
+
+func _exit_tree() -> void:
+	release_cached_resources_for_quit()
+
+func release_cached_resources_for_quit() -> void:
+	# 进程退出时，$Background（TextureRect）的 .texture 仍指向当前显示的
+	# StartBackground 帧（1920×1080，≈8MB）。若不主动解除，该 Texture2D 会在
+	# RenderingServer 关闭后仍被节点引用，触发 "Texture ... leaked N bytes" /
+	# "resources still in use at exit"。这里解除引用并清空本地帧数组。
+	# 注意：_bg_frames 可能与 GameState.shared_start_bg_frames 是同一数组引用，
+	# clear() 只解除本地变量持有；autoload 缓存由 GameState 退出流程统一清空。
+	if is_instance_valid(background):
+		background.texture = null
+	_bg_frames = []
 
 func _apply_title_tuning() -> void:
 	if title == null:
@@ -103,14 +117,16 @@ func _input(event: InputEvent) -> void:
 		get_viewport().set_input_as_handled()
 		GameState.stop_start_sequence_music()
 		# 优先用已预加载的 PackedScene 切换，避免再次读盘
-		var packed: PackedScene = ResourceLoader.load_threaded_get(STAGE_1_PATH)
+		var packed: PackedScene = GameState.take_threaded_load(STAGE_1_PATH) as PackedScene
 		if packed != null:
 			GameState.current_stage = 1
 			GameState.score = 0
 			GameState.coins = 0
+			GameState.yuanbao = 0
 			GameState.lives = GameState.MAX_LIVES
 			GameState.score_changed.emit(GameState.score)
 			GameState.coins_changed.emit(GameState.coins)
+			GameState.yuanbao_changed.emit(GameState.yuanbao)
 			GameState.lives_changed.emit(GameState.lives)
 			get_tree().change_scene_to_packed(packed)
 		else:

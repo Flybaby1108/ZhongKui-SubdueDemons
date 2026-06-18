@@ -15,12 +15,15 @@ class_name Boss
 #               与 ATTACK1 节奏不同（更长更具压迫感），美术差异化提供"换招"打击感。
 #               FireSkull 撞到钟馗扣 1 颗心；可被钟馗吸入葫芦，喷出后变 ball
 #               攻击 Boss 扣 1 滴血。
+#   ATTACK3 —— 26 帧攻击序列（Boss_Attack3_01 ~ Boss_Attack3_26），中段触发鬼火：
+#               Boss 关的四层平台各随机生成一簇鬼火，之后每 3 秒向两侧扩展一格，
+#               形成 1 → 3 → 5 的联排。鬼火只会被鬼球触碰消灭。
 #   DEAD    —— 20 滴血被玩家释放的捕获物打完后死亡并通关。
 #
 # 召唤节奏：
 #   _ready 后启动随机间隔（COOLDOWN_MIN ~ COOLDOWN_MAX 秒）的冷却计时，
-#   每次 timeout 时**严格交替**使用 ATTACK1 / ATTACK2（先 Attack1，再 Attack2，
-#   再 Attack1……依此类推）。整体平均 ~10s 一次招式，节奏稳定可预期。
+#   每次 timeout 时**严格顺序交替**使用 ATTACK1 / ATTACK2 / ATTACK3（先 Attack1，
+#   再 Attack2，再 Attack3……依此类推）。整体平均 ~5s 一次招式，节奏稳定可预期。
 #
 # 设计：
 # - **位置钉死**：Boss 不受重力、不走 move_and_slide，spawn 时 level.gd 把它放到
@@ -75,6 +78,16 @@ const ATTACK1_FRAME_PATH_FMT := "res://assets/sprites/Enemy/Boss/Boss_Attack1/Bo
 const ATTACK2_FRAME_COUNT := 24
 const ATTACK2_FRAME_INTERVAL := 0.06
 const ATTACK2_FRAME_PATH_FMT := "res://assets/sprites/Enemy/Boss/Boss_Attack2/Boss_Attack2_%02d.png"
+
+# 攻击 3（26 帧，一次性播放）。中段点燃四层平台上的鬼火。
+const ATTACK3_FRAME_COUNT := 26
+const ATTACK3_FRAME_INTERVAL := 0.06
+const ATTACK3_FRAME_PATH_FMT := "res://assets/sprites/Enemy/Boss/Boss_Attack3/Boss_Attack3_%02d.png"
+
+# 死亡动画（33 帧，一次性播放）。沿用攻击帧率，播放完后移除 Boss 节点。
+const DIE_FRAME_COUNT := 33
+const DIE_FRAME_INTERVAL := 0.06
+const DIE_FRAME_PATH_FMT := "res://assets/sprites/Enemy/Boss/Boss_Die/Boss_Die_%02d.png"
 # Attack2 单次施展中循环播放 Attack2 序列帧的轮数；每轮各释放 1 颗 FireSkull。
 const ATTACK2_REPEAT := 3
 
@@ -82,15 +95,24 @@ const ATTACK2_REPEAT := 3
 # 视觉上 Boss "出招"瞬间，前半段是举手蓄力、后半段是收势。
 # - SUMMON_FRAME_1：Attack1 召唤小怪
 # - FIRE_SKULL_FRAME：Attack2 每轮释放 1 颗 FireSkull
+# - GHOST_FIRE_FRAME：Attack3 点燃四层平台鬼火
 const SUMMON_FRAME_1 := 24  # Attack1：48 帧的中段
 const FIRE_SKULL_FRAME := 12  # Attack2：24 帧的中段
+const GHOST_FIRE_FRAME := 13  # Attack3：26 帧的中段
+const GHOST_FIRE_EXPAND_DELAY := 3.0
+const GHOST_FIRE_MAX_RADIUS := 2
+const GHOST_FIRE_SPACING := 70.0
+const GHOST_FIRE_PLATFORM_MARGIN := 44.0
+const GHOST_FIRE_PLATFORM_COUNT := 4
+# 鬼火节点挂在对应平台上的标记，用于下一轮 Attack3 判断该层是否仍有火。
+const GHOST_FIRE_PLATFORM_ID_META := "boss_ghost_fire_platform_id"
 
 # 每次召唤产出的小怪数量
 const SUMMON_COUNT := 4
 
-# 技能冷却（秒）。每次攻击结束后随机抽取，平均 ~10s。
-const COOLDOWN_MIN := 7.5
-const COOLDOWN_MAX := 12.5
+# 技能冷却（秒）。每次攻击结束后随机抽取，平均 ~5s。
+const COOLDOWN_MIN := 4.0
+const COOLDOWN_MAX := 6.0
 
 # 可被召唤的敌人 PackedScene 列表（每次随机挑一种，召唤出 4 个相同种类）
 # NOTE: lazy-loaded in _ready() to avoid preload()-time script compilation race
@@ -99,8 +121,9 @@ var SUMMON_SCENES: Array[PackedScene] = []
 
 # Attack2 释放的 FireSkull 投射物
 const FIRE_SKULL_SCENE: PackedScene = preload("res://scenes/fire_skull.tscn")
+const GHOST_FIRE_SCENE: PackedScene = preload("res://scenes/boss_ghost_fire.tscn")
 
-enum State { IDLE, ATTACK1, ATTACK2 }
+enum State { IDLE, ATTACK1, ATTACK2, ATTACK3 }
 
 const MAX_HEALTH := 20
 
@@ -119,10 +142,14 @@ var _skull_marker: Node2D = null
 var _idle_frames: Array = []
 var _attack1_frames: Array = []
 var _attack2_frames: Array = []
+var _attack3_frames: Array = []
+var _die_frames: Array = []
 var _frame_idx: int = 0
 var _state: int = State.IDLE
 var health: int = MAX_HEALTH
 var dying: bool = false
+var _death_frame_idx: int = 0
+var _death_anim_t: float = 0.0
 
 # 攻击动画专用计时（不复用 AnimTimer，避免 idle 8-tick 节奏被攻击 6-tick 污染）
 # Attack1 / Attack2 共用这两个变量：同一时刻只可能有一个攻击在播。
@@ -136,12 +163,14 @@ var _attack_summon_done: bool = false  # 本轮攻击是否已召唤过（防止
 var _attack2_round_idx: int = 0
 var _attack2_skull_done: bool = false
 
+var _attack3_fire_done: bool = false
+
 # 技能冷却倒计时
 var _skill_t: float = 0.0
 
-# 下一次招式索引（0 = ATTACK1，1 = ATTACK2），每次出招后翻转，实现严格交替。
+# 下一次招式索引（0 = ATTACK1，1 = ATTACK2，2 = ATTACK3），每次出招后 +1，实现严格顺序交替。
 # 首次出招用 ATTACK1（与原先随机机制中"50% 概率 Attack1"在玩家观感上相近，
-# 同时确保两招都会出现，不会像之前那样长时间锁死在某一招上）。
+# 同时确保三招都会出现，不会像之前那样长时间锁死在某一招上）。
 var _next_attack: int = 0
 
 func _ready() -> void:
@@ -182,6 +211,24 @@ func _ready() -> void:
 			continue
 		_attack2_frames.append(tex2)
 
+	# 加载 attack3 帧（同上规则）
+	for i in range(1, ATTACK3_FRAME_COUNT + 1):
+		var path3 := ATTACK3_FRAME_PATH_FMT % i
+		var tex3 := _load_texture_with_source_fallback(path3)
+		if tex3 == null:
+			push_warning("[Boss] Attack3 第 %d 帧加载失败：%s（资源未导入？）" % [i, path3])
+			continue
+		_attack3_frames.append(tex3)
+
+	# 加载死亡帧（Boss_Die_01 ~ Boss_Die_33）
+	for i in range(1, DIE_FRAME_COUNT + 1):
+		var die_path := DIE_FRAME_PATH_FMT % i
+		var die_tex := load(die_path)
+		if die_tex == null:
+			push_warning("[Boss] Die 第 %d 帧加载失败：%s（资源未导入？）" % [i, die_path])
+			continue
+		_die_frames.append(die_tex)
+
 	anim_timer.wait_time = IDLE_FRAME_INTERVAL
 	anim_timer.timeout.connect(_on_anim_tick)
 	anim_timer.start()
@@ -206,6 +253,19 @@ func _ready() -> void:
 
 	# 通知 HUD 显示 Boss 血条。延迟一帧确保 level 节点树已就绪、HUD 的 _ready 已跑完。
 	call_deferred("_notify_hud_show")
+
+func _load_texture_with_source_fallback(path: String) -> Texture2D:
+	var tex := load(path) as Texture2D
+	if tex != null:
+		return tex
+	var image := Image.load_from_file(path)
+	if image == null or image.is_empty():
+		return null
+	return ImageTexture.create_from_image(image)
+
+func _exit_tree() -> void:
+	if CharTuning.tuning_changed.is_connected(_apply_tuning):
+		CharTuning.tuning_changed.disconnect(_apply_tuning)
 
 func _apply_tuning() -> void:
 	if sprite == null:
@@ -267,24 +327,30 @@ func _on_anim_tick() -> void:
 
 func _process(delta: float) -> void:
 	if dying:
+		_tick_die(delta)
 		return
-	# IDLE：倒数冷却 → 严格交替进入 ATTACK1 / ATTACK2
+	# IDLE：倒数冷却 → 严格顺序交替进入 ATTACK1 / ATTACK2 / ATTACK3
 	if _state == State.IDLE:
 		_skill_t -= delta
 		if _skill_t <= 0.0:
 			if _next_attack == 0:
 				_next_attack = 1
 				_enter_attack1()
+			elif _next_attack == 1:
+				_next_attack = 2
+				_enter_attack2()
 			else:
 				_next_attack = 0
-				_enter_attack2()
+				_enter_attack3()
 		return
 
-	# ATTACK1 / ATTACK2：累计推进帧
+	# ATTACK1 / ATTACK2 / ATTACK3：累计推进帧
 	if _state == State.ATTACK1:
 		_tick_attack1(delta)
 	elif _state == State.ATTACK2:
 		_tick_attack2(delta)
+	elif _state == State.ATTACK3:
+		_tick_attack3(delta)
 
 func _enter_attack1() -> void:
 	if _attack1_frames.is_empty():
@@ -390,6 +456,46 @@ func _finish_attack2() -> void:
 	# 重排下一次冷却
 	_skill_t = randf_range(COOLDOWN_MIN, COOLDOWN_MAX)
 
+# ── Attack3 ───────────────────────────────────────────────────────────────
+# Attack3 在动画中段为 Boss 关的四层平台各放置一组鬼火。每组独立扩展：
+# 初始 1 个，3 秒后补两侧形成 3 个，再 3 秒后补外侧形成 5 个。
+
+func _enter_attack3() -> void:
+	if _attack3_frames.is_empty():
+		_skill_t = randf_range(COOLDOWN_MIN, COOLDOWN_MAX)
+		return
+	_state = State.ATTACK3
+	_frame_idx = 0
+	_attack_anim_t = 0.0
+	_attack3_fire_done = false
+	sprite.texture = _attack3_frames[0]
+
+func _tick_attack3(delta: float) -> void:
+	_attack_anim_t += delta
+	while _attack_anim_t >= ATTACK3_FRAME_INTERVAL:
+		_attack_anim_t -= ATTACK3_FRAME_INTERVAL
+		_frame_idx += 1
+
+		var frame_no := _frame_idx + 1
+		if not _attack3_fire_done and frame_no >= GHOST_FIRE_FRAME:
+			_attack3_fire_done = true
+			_ignite_ghost_fires()
+
+		if _frame_idx >= _attack3_frames.size():
+			_finish_attack3()
+			return
+
+		sprite.texture = _attack3_frames[_frame_idx]
+
+func _finish_attack3() -> void:
+	_state = State.IDLE
+	_frame_idx = 0
+	_attack_anim_t = 0.0
+	_attack3_fire_done = false
+	if _idle_frames.size() > 0:
+		sprite.texture = _idle_frames[0]
+	_skill_t = randf_range(COOLDOWN_MIN, COOLDOWN_MAX)
+
 # 从 Boss 左手法器圆环位置生成 1 颗 FireSkull，朝玩家飞。
 # 法器圆环在 Boss 局部坐标系下的偏移：用 CharTuning.boss_skull_spawn_offset_x/y 暴露给 F1 调参。
 # Boss 在画面中通常面朝左（玩家在左侧），sprite.flip_h 默认 false（素材原图朝左）。
@@ -415,6 +521,99 @@ func _spawn_fire_skull() -> void:
 	var player: Node2D = get_tree().get_first_node_in_group("player")
 	if skull.has_method("launch"):
 		skull.launch(player)
+
+func _ignite_ghost_fires() -> void:
+	if GHOST_FIRE_SCENE == null:
+		return
+	var level := _find_level()
+	if level == null or not level.has_method("get_platforms"):
+		return
+	var platforms: Array = level.get_platforms().duplicate()
+	if platforms.is_empty():
+		return
+	platforms.sort_custom(func(a, b): return float(a["top_y"]) < float(b["top_y"]))
+	if platforms.size() > GHOST_FIRE_PLATFORM_COUNT:
+		platforms = platforms.slice(0, GHOST_FIRE_PLATFORM_COUNT)
+	for platform in platforms:
+		if _platform_has_active_ghost_fire(int(platform["id"])):
+			continue
+		_start_ghost_fire_row(level, platform)
+
+func _start_ghost_fire_row(level: Node, platform: Dictionary) -> void:
+	var platform_id := int(platform.get("id", -1))
+	var left_x := float(platform["left_x"]) + GHOST_FIRE_PLATFORM_MARGIN
+	var right_x := float(platform["right_x"]) - GHOST_FIRE_PLATFORM_MARGIN
+	if right_x < left_x:
+		var center_x := float(platform["center_x"])
+		left_x = center_x
+		right_x = center_x
+	var min_center := left_x + GHOST_FIRE_SPACING * float(GHOST_FIRE_MAX_RADIUS)
+	var max_center := right_x - GHOST_FIRE_SPACING * float(GHOST_FIRE_MAX_RADIUS)
+	var center_x: float
+	if max_center >= min_center:
+		center_x = randf_range(min_center, max_center)
+	else:
+		center_x = randf_range(left_x, right_x)
+	var base_pos := Vector2(center_x, float(platform["top_y"]))
+	var row := {
+		"level": level,
+		"platform_id": platform_id,
+		"base_pos": base_pos,
+		"platform": platform,
+		"fires": {},
+	}
+	_spawn_ghost_fire_slot(row, 0)
+	_schedule_ghost_fire_expand(row, 1)
+	_schedule_ghost_fire_expand(row, 2)
+
+func _schedule_ghost_fire_expand(row: Dictionary, radius: int) -> void:
+	var delay := GHOST_FIRE_EXPAND_DELAY * float(radius)
+	# 用挂在 boss 节点上的 Timer（GameState.wait），随 boss 释放，避免退出时
+	# SceneTreeTimer 泄漏。
+	GameState.wait(self, delay).connect(func():
+		_expand_ghost_fire_row(row, radius)
+	)
+
+func _expand_ghost_fire_row(row: Dictionary, radius: int) -> void:
+	if dying:
+		return
+	var level: Node = row.get("level", null)
+	if not is_instance_valid(level):
+		return
+	for slot in [-radius, radius]:
+		_spawn_ghost_fire_slot(row, slot)
+
+func _spawn_ghost_fire_slot(row: Dictionary, slot: int) -> void:
+	var fires: Dictionary = row.get("fires", {})
+	if fires.has(slot) and is_instance_valid(fires[slot]):
+		return
+	var level: Node = row.get("level", null)
+	if not is_instance_valid(level):
+		return
+	var platform: Dictionary = row.get("platform", {})
+	var base_pos: Vector2 = row.get("base_pos", global_position)
+	var platform_id: int = int(row.get("platform_id", -1))
+	var pos := base_pos + Vector2(GHOST_FIRE_SPACING * float(slot), 0.0)
+	var left_limit := float(platform.get("left_x", pos.x)) + GHOST_FIRE_PLATFORM_MARGIN * 0.5
+	var right_limit := float(platform.get("right_x", pos.x)) - GHOST_FIRE_PLATFORM_MARGIN * 0.5
+	if pos.x < left_limit or pos.x > right_limit:
+		return
+	var fire := GHOST_FIRE_SCENE.instantiate()
+	level.add_child(fire)
+	fire.set_meta(GHOST_FIRE_PLATFORM_ID_META, platform_id)
+	fire.global_position = pos
+	fires[slot] = fire
+	row["fires"] = fires
+
+func _platform_has_active_ghost_fire(platform_id: int) -> bool:
+	if platform_id < 0:
+		return false
+	for fire in get_tree().get_nodes_in_group("boss_ghost_fire"):
+		if fire == null or not is_instance_valid(fire):
+			continue
+		if fire.has_meta(GHOST_FIRE_PLATFORM_ID_META) and int(fire.get_meta(GHOST_FIRE_PLATFORM_ID_META)) == platform_id:
+			return true
+	return false
 
 # 召唤：从 level 拿到平台落点，随机挑 SUMMON_COUNT 个不同位置 + 随机一种敌人。
 func _summon_minions() -> void:
@@ -465,24 +664,45 @@ func die() -> void:
 		return
 	dying = true
 	anim_timer.stop()
-	# 切换到死亡贴图（单帧定格）
-	var die_tex: Texture2D = load("res://assets/sprites/Enemy/Boss/Boss_Die/Boss_Die_01.png") as Texture2D
-	if die_tex != null and sprite != null:
-		sprite.texture = die_tex
+	_state = State.IDLE
+	_frame_idx = 0
+	_death_frame_idx = 0
+	_death_anim_t = 0.0
+	# 播放死亡序列第一帧；若资源未导入/缺失，则降级为原先的单帧停留后移除。
+	if not _die_frames.is_empty() and sprite != null:
+		sprite.texture = _die_frames[0]
 		sprite.modulate = Color.WHITE
 	# 通知 HUD 收起血条
 	var hud := _get_hud()
 	if hud != null and hud.has_method("hide_boss_bar"):
 		hud.hide_boss_bar()
+	if _die_frames.is_empty():
+		# 兜底：死亡帧没加载到时停留一会再移除，避免瞬间消失。
+		# 用挂在 boss 节点上的 Timer（GameState.wait），随 boss 释放，避免退出时
+		# SceneTreeTimer 泄漏。
+		GameState.wait(self, 1.2).connect(_finish_death)
+
+func _tick_die(delta: float) -> void:
+	if _die_frames.is_empty() or sprite == null:
+		return
+	_death_anim_t += delta
+	while _death_anim_t >= DIE_FRAME_INTERVAL:
+		_death_anim_t -= DIE_FRAME_INTERVAL
+		_death_frame_idx += 1
+		if _death_frame_idx >= _die_frames.size():
+			_finish_death()
+			return
+		sprite.texture = _die_frames[_death_frame_idx]
+
+func _finish_death() -> void:
 	var level := _find_level()
 	if level != null and level.has_method("on_boss_defeated"):
 		level.on_boss_defeated()
-	# 死亡贴图停留一会再移除节点，避免瞬间消失
-	var t := get_tree().create_timer(1.2)
-	t.timeout.connect(func() -> void:
-		if is_instance_valid(self):
-			queue_free()
-	)
+	_queue_free_if_alive()
+
+func _queue_free_if_alive() -> void:
+	if is_instance_valid(self):
+		queue_free()
 
 # 通过 level.ui 拿到 HUD（CanvasLayer）。HUD 上挂着 hud.gd，提供 show/update/hide_boss_bar 三个方法。
 func _get_hud() -> Node:

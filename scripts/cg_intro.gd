@@ -50,7 +50,8 @@ func _ready() -> void:
 	GameState.prepare_start_sequence_music()
 
 	# 立即开始后台预加载 main.tscn（CG 播放 ~11s 内足以加载完毕）
-	ResourceLoader.load_threaded_request(MAIN_MENU_PATH)
+	# 经 GameState 登记，退出时统一取回，避免未取走请求泄漏。
+	GameState.request_threaded_load(MAIN_MENU_PATH)
 
 	# 加载 StartBackground 帧（46 帧，全部已 import，瞬间完成）
 	# 这些 Texture2D 资源会被 ResourceLoader 缓存（弱引用），后续 main_menu 再
@@ -88,6 +89,29 @@ func _ready() -> void:
 	# CgLayer 初始完全不透明（从第 1 帧开始全覆盖 BgLayer）
 	cg_layer.modulate.a = 1.0
 
+func _exit_tree() -> void:
+	release_cached_resources_for_quit()
+
+func release_cached_resources_for_quit() -> void:
+	# 场景销毁（含进程退出）时，若 Music 节点仍归本场景持有且正在播放，其
+	# AudioStreamPlaybackMP3 会在 AudioServer 关闭前继续引用 CGv1.mp3，导致退出时
+	# 报 "1 resources still in use at exit"。这里主动停止播放并解除 stream 引用，
+	# 让资源引用计数及时归零。已 reparent 到 root 的情况由 GameState 统一清理。
+	if is_instance_valid(music) and music.get_parent() == self:
+		music.stop()
+		music.stream = null
+
+	# bg_layer / cg_layer 的 TextureRect.texture 仍指向当前显示的 1920×1080 帧。
+	# 进程退出时若不主动解除，这些 Texture2D 会在 RenderingServer 关闭后仍被节点
+	# 引用，触发 "Texture ... leaked N bytes" / "resources still in use at exit"。
+	# 这里解除 .texture 与本地帧数组引用，让纹理引用计数及时归零。
+	if is_instance_valid(bg_layer):
+		bg_layer.texture = null
+	if is_instance_valid(cg_layer):
+		cg_layer.texture = null
+	_bg_frames.clear()
+	_cg_frames.clear()
+
 func _process(delta: float) -> void:
 	if _cg_done:
 		return
@@ -96,9 +120,11 @@ func _process(delta: float) -> void:
 	_bg_anim_t += delta
 	while _bg_anim_t >= BG_FRAME_INTERVAL:
 		_bg_anim_t -= BG_FRAME_INTERVAL
+		# 帧未加载时（_bg_frames 为空）直接跳过，避免对 0 取模崩溃。
+		if _bg_frames.is_empty():
+			break
 		_bg_frame_idx = (_bg_frame_idx + 1) % _bg_frames.size()
-		if not _bg_frames.is_empty():
-			bg_layer.texture = _bg_frames[_bg_frame_idx]
+		bg_layer.texture = _bg_frames[_bg_frame_idx]
 
 	# ── CG 帧推进 ─────────────────────────────────────────────────
 	_cg_anim_t += delta
@@ -154,16 +180,14 @@ func _finish(skipped: bool = false) -> void:
 		# 正常播完：把 Music 节点 reparent 到 SceneTree.root，使其脱离当前场景，
 		# 不会随 cg_intro 一起被释放。CGv1.mp3 结束后由 GameState 接续 StartMusic.mp3。
 		if is_instance_valid(music) and music.playing:
-			var root := get_tree().root
-			music.get_parent().remove_child(music)
-			root.add_child(music)
+			music.reparent(get_tree().root)
 			music.process_mode = Node.PROCESS_MODE_ALWAYS
 		elif is_instance_valid(music):
 			# 如果没在播放（极端情况），直接释放；StartMusic 已由 GameState 接续。
 			music.queue_free()
 
 	# 用后台已预加载的 PackedScene 切换（无磁盘读取，零卡顿）
-	var packed: PackedScene = ResourceLoader.load_threaded_get(MAIN_MENU_PATH)
+	var packed: PackedScene = GameState.take_threaded_load(MAIN_MENU_PATH) as PackedScene
 	if packed != null:
 		get_tree().change_scene_to_packed(packed)
 	else:

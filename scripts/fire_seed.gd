@@ -31,6 +31,7 @@ var _anim_timer: float = 0.0
 var _direction: int = 1  # +1 朝右滑，-1 朝左
 var _fall_vel: float = 0.0
 var _landed: bool = false
+var _free_queued: bool = false
 
 func _ready() -> void:
 	_frames = []
@@ -55,7 +56,7 @@ func _process(delta: float) -> void:
 		_tick_slide(delta)
 	# 飞出屏幕自动销毁
 	if global_position.x < WORLD_LEFT or global_position.x > WORLD_RIGHT:
-		queue_free()
+		_queue_free_deferred()
 
 func _tick_anim(delta: float) -> void:
 	if _frames.size() <= 1:
@@ -102,14 +103,23 @@ func _tick_slide(delta: float) -> void:
 		global_position.y = hit.position.y - FALL_HALF_HEIGHT
 
 func _on_body_entered(body: Node) -> void:
+	if _free_queued:
+		return
 	# 碰到钟馗：扣血并消失（玩家在 take_damage 时已处理无敌帧，
 	# 这里只在玩家可受伤时扣血，不重复处理无敌逻辑）
 	if body is Boss and not body.dying:
 		body.take_damage(1)
-		queue_free()
+		_queue_free_deferred()
 		return
 	if body is Player and not body.invincible:
 		body.invincible = true
 		body.invincible_timer = body.HURT_INVINCIBLE_TIME
 		body.take_damage()
-		queue_free()
+		_queue_free_deferred()
+
+func _queue_free_deferred() -> void:
+	if _free_queued:
+		return
+	_free_queued = true
+	set_deferred("monitoring", false)
+	call_deferred("queue_free")

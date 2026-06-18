@@ -300,7 +300,10 @@
             Chapter2 <span class="stage-badge">Stage 2</span>
         </button>
         <button class="tab-btn" data-stage="3">
-            ChapterBoss <span class="stage-badge">Stage 3</span>
+            Chapter3 <span class="stage-badge">Stage 3</span>
+        </button>
+        <button class="tab-btn" data-stage="4">
+            ChapterBoss <span class="stage-badge">Stage 4</span>
         </button>
     </div>
 
@@ -355,13 +358,13 @@
                 <div class="tool-color" style="background: rgba(120, 170, 80, 1);"></div>
                 <span>宫廷僵尸 (Z)</span>
             </div>
+            <div class="tool" data-char="F">
+                <div class="tool-color" style="background: rgba(210, 120, 40, 1);"></div>
+                <span>胖魔王 (F)</span>
+            </div>
             <div class="tool" data-char="B">
                 <div class="tool-color" style="background: rgba(80, 0, 0, 1);"></div>
                 <span>Boss (B)</span>
-            </div>
-            <div class="tool" data-char="r">
-                <div class="tool-color" style="background: rgba(255, 215, 0, 1);"></div>
-                <span>元宝 (r)</span>
             </div>
         </div>
         <div class="platform-panel" id="platform-panel">
@@ -391,7 +394,7 @@
             <p style="color:#aaa; margin:0 0 12px;">
                 1. 切换上方 Tab 选择关卡。&nbsp;
                 2. 拖拽绘制地形/实体。&nbsp;
-                3. <b>导出</b> 将生成包含 <code>Chapter1</code>、<code>Chapter2</code> 和 <code>ChapterBoss</code> 的完整 <code>level_data.gd</code>，各关卡数据互不影响。
+                3. <b>导出</b> 将生成包含 <code>Chapter1</code>、<code>Chapter2</code>、<code>Chapter3</code> 和 <code>ChapterBoss</code> 的完整 <code>level_data.gd</code>，各关卡数据互不影响。
             </p>
         </div>
         <div class="button-group">
@@ -428,6 +431,10 @@
             bgVersion: '20260602',
         },
         3: {
+            name:    'Chapter3',
+            bgImage: 'assets/sprites/Chapter_BG/Chapter3_BG.png',
+        },
+        4: {
             name:    'ChapterBoss',
             bgImage: 'assets/sprites/ChapterBoss/ChapterBoss_BG_a.png',
         },
@@ -530,8 +537,8 @@
         'R': 'rgba(255, 0, 128, 1)',
         'D': 'rgba(180, 0, 0, 1)',
         'Z': 'rgba(120, 170, 80, 1)',
+        'F': 'rgba(210, 120, 40, 1)',
         'B': 'rgba(80, 0, 0, 1)',
-        'r': 'rgba(255, 215, 0, 1)',
     };
     const nameMap = {
         'P': '主角',
@@ -539,8 +546,8 @@
         'R': '红衣女鬼',
         'D': '红魔王',
         'Z': '宫廷僵尸',
+        'F': '胖魔王',
         'B': 'Boss',
-        'r': '元宝',
     };
     const ENTITY_CHARS = new Set(Object.keys(nameMap));
 
@@ -983,14 +990,14 @@
             const mapData = allMapData[stageKey];
             out.push('\t' + stageKey + ': [');
             for (let y = 0; y < ROWS; y++) {
-                out.push('\t\t"' + mapData[y].join('') + '",');
+                out.push('\t\t"' + mapData[y].map(ch => colorMap[ch] ? ch : ' ').join('') + '",');
             }
             out.push('\t],');
         }
         out.push('}');
         out.push('');
         out.push('const TILE_SOURCES := {"#": 0, ".": 1, "=": 2}');
-        out.push('const PICKUP_TYPES := {"r": 2}');
+        out.push('const PICKUP_TYPES := {}');
         out.push('');
         out.push('const FLOATING_PLATFORMS := {');
         for (const stageKey of stageKeys) {
@@ -1136,7 +1143,7 @@
     }
 
     function isMapRowString(value) {
-        return value.length >= 32 && /^[ #.=XPMRDZBr]+$/.test(value.replace(/[GS]/g, ' '));
+        return value.length >= 32 && /^[ #.=XPMRDZFBr]+$/.test(value.replace(/[GS]/g, ' '));
     }
 
     function parseCurrentStageRows(text) {
@@ -1158,8 +1165,8 @@
         const lineRe = /"([^"]*)"/g;
         let m;
         while ((m = lineRe.exec(text)) !== null) {
-            // 导入时静默清除已废弃字符（a/c/h 拾取物、G/S 旧敌人）
-            if (isMapRowString(m[1])) parsed.push(m[1].replace(/[achGS]/g, ' '));
+            // 导入时静默清除已废弃字符（a/c/h 拾取物、r 旧元宝、G/S 旧敌人）
+            if (isMapRowString(m[1])) parsed.push(m[1].replace(/[achrGS]/g, ' '));
         }
         return parsed;
     }
