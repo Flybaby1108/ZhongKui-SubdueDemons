@@ -52,10 +52,16 @@ const END_EFFECT_FRAME_FIRST_INDEX := 1
 const END_EFFECT_FRAME_COUNT := 23
 const END_EFFECT_WORD_PATH := "res://assets/sprites/EndEffect/EndEffect_Word.png"
 const END_EFFECT_AUDIO_PATH := "res://assets/audio/EndEffect.mp3"
-const END_EFFECT_FPS := PASS_EFFECT_FALLBACK_FPS / 2.0
+const END_EFFECT_FPS := PASS_EFFECT_FALLBACK_FPS / 2.0 * 0.8
 const END_EFFECT_BLACK_FADE_TIME := 1.0
 const END_EFFECT_WORD_FADE_TIME := 4.0
 const END_EFFECT_WORD_FADE_FPS := PASS_EFFECT_FALLBACK_FPS
+# EndEffect 播放 5 秒后，在画面底部显示返回开始界面的提示文字。
+const END_EFFECT_PROMPT_DELAY := 5.0
+# 提示文字以透明度 0% → 100% 在 3 秒内逐渐呈现。
+const END_EFFECT_PROMPT_FADE_TIME := 3.0
+const END_EFFECT_PROMPT_FADE_FPS := PASS_EFFECT_FALLBACK_FPS
+const END_EFFECT_PROMPT_TEXT := "按回车键回到开始界面"
 const ACTIVE_BALL_GROUP := "active_ghost_balls"
 static var _fdk_mechanism_texture_cache: Texture2D = null
 
@@ -85,6 +91,8 @@ var _end_effect_layer: CanvasLayer = null
 var _end_effect_frame_view: TextureRect = null
 var _end_effect_word_view: TextureRect = null
 var _end_effect_audio_player: AudioStreamPlayer = null
+var _end_effect_prompt_label: Label = null
+var _end_effect_can_return: bool = false
 
 @onready var tile_map: TileMapLayer = $TileMap
 @onready var nogo_map: TileMapLayer = $NoGoMap
@@ -635,6 +643,13 @@ func _process(delta: float) -> void:
 		else:
 			_on_stage_clear(true)
 
+func _input(event: InputEvent) -> void:
+	# EndEffect 播放 5 秒后，按回车键回到开始界面。
+	if _end_effect_can_return and event.is_action_pressed("ui_accept"):
+		get_viewport().set_input_as_handled()
+		_end_effect_can_return = false
+		GameState.goto_main_menu()
+
 func _on_enemy_removed() -> void:
 	enemies_remaining -= 1
 	if not is_inside_tree():
@@ -753,6 +768,12 @@ func _play_pass_effect() -> void:
 	_pass_effect_audio_player = null
 	_pass_effect_layer = null
 
+func play_pass_effect_for_game_over() -> void:
+	await _play_pass_effect()
+
+func lock_for_game_over() -> void:
+	level_complete = true
+
 func _show_pass_effect_black_screen() -> void:
 	if not is_inside_tree():
 		return
@@ -830,6 +851,31 @@ func _play_end_effect() -> void:
 	black_screen.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	layer.add_child(black_screen)
 
+	# 提示文字层（叠在最上，初始隐藏，播放 5 秒后显示）。
+	# 字号/描边与开始界面 LoadingLabel 保持一致。
+	var prompt_label := Label.new()
+	prompt_label.name = "EndEffectPrompt"
+	prompt_label.text = END_EFFECT_PROMPT_TEXT
+	prompt_label.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
+	prompt_label.offset_left = -360.0
+	prompt_label.offset_right = -16.0
+	prompt_label.offset_top = -48.0
+	prompt_label.offset_bottom = -8.0
+	prompt_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	prompt_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	prompt_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	prompt_label.add_theme_color_override("font_color", Color(1, 1, 1, 1))
+	prompt_label.add_theme_color_override("font_outline_color", Color(0, 0, 0, 1))
+	prompt_label.add_theme_constant_override("outline_size", 5)
+	prompt_label.add_theme_font_size_override("font_size", 28)
+	prompt_label.visible = false
+	prompt_label.modulate = Color(1.0, 1.0, 1.0, 0.0)
+	layer.add_child(prompt_label)
+	_end_effect_prompt_label = prompt_label
+
+	# 5 秒后显示提示文字并允许按回车返回开始界面。
+	_start_end_effect_prompt_timer()
+
 	var frame_time := 1.0 / END_EFFECT_FPS
 	var frame_index := 0
 
@@ -872,6 +918,25 @@ func _play_end_effect() -> void:
 		frame_view.texture = frames[frame_index]
 		await GameState.wait(self, frame_time)
 		frame_index = (frame_index + 1) % frames.size()
+
+func _start_end_effect_prompt_timer() -> void:
+	await GameState.wait(self, END_EFFECT_PROMPT_DELAY)
+	if not is_inside_tree():
+		return
+	# 提示文字以透明度 0% → 100% 在 3 秒内逐渐呈现。
+	if is_instance_valid(_end_effect_prompt_label):
+		_end_effect_prompt_label.modulate = Color(1.0, 1.0, 1.0, 0.0)
+		_end_effect_prompt_label.visible = true
+		var fade_step := 1.0 / END_EFFECT_PROMPT_FADE_FPS
+		var elapsed := 0.0
+		while elapsed < END_EFFECT_PROMPT_FADE_TIME and is_inside_tree() and is_instance_valid(_end_effect_prompt_label):
+			var alpha: float = clampf(elapsed / END_EFFECT_PROMPT_FADE_TIME, 0.0, 1.0)
+			_end_effect_prompt_label.modulate = Color(1.0, 1.0, 1.0, alpha)
+			await GameState.wait(self, fade_step)
+			elapsed += fade_step
+		if is_instance_valid(_end_effect_prompt_label):
+			_end_effect_prompt_label.modulate = Color(1.0, 1.0, 1.0, 1.0)
+	_end_effect_can_return = true
 
 func _has_end_effect_for_stage() -> bool:
 	return _has_pass_effect_for_stage() and stage_number == 4

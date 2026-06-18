@@ -1,7 +1,19 @@
-[gd_scene load_steps=3 format=3 uid="uid://cg_intro_001"]
+[gd_scene load_steps=4 format=3 uid="uid://cg_intro_001"]
 
 [ext_resource type="Script" uid="uid://b5y767yrqlatk" path="res://scripts/cg_intro.gd" id="1_cg"]
 [ext_resource type="AudioStreamMP3" path="res://assets/audio/CGv1.mp3" id="2_music"]
+
+[sub_resource type="StyleBoxFlat" id="StartFrame"]
+bg_color = Color(0, 0, 0, 0)
+border_width_left = 3
+border_width_top = 3
+border_width_right = 3
+border_width_bottom = 3
+border_color = Color(1, 1, 1, 1)
+corner_radius_top_left = 8
+corner_radius_top_right = 8
+corner_radius_bottom_right = 8
+corner_radius_bottom_left = 8
 
 [node name="CgIntro" type="Control"]
 anchors_preset = 15
@@ -23,6 +35,12 @@ anchor_bottom = 1.0
 expand_mode = 1
 stretch_mode = 6
 
+[node name="BlackOverlay" type="ColorRect" parent="."]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+color = Color(0, 0, 0, 1)
+
 [node name="Music" type="AudioStreamPlayer" parent="."]
 stream = ExtResource("2_music")
 autoplay = false
@@ -43,3 +61,47 @@ theme_override_colors/font_color = Color(1, 1, 1, 1)
 theme_override_colors/font_outline_color = Color(0, 0, 0, 1)
 theme_override_constants/outline_size = 4
 theme_override_font_sizes/font_size = 22
+
+[node name="StartFrame" type="PanelContainer" parent="."]
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_styles/panel = SubResource("StartFrame")
+
+[node name="Margin" type="MarginContainer" parent="StartFrame"]
+layout_mode = 2
+theme_override_constants/margin_left = 40
+theme_override_constants/margin_top = 24
+theme_override_constants/margin_right = 40
+theme_override_constants/margin_bottom = 24
+
+[node name="StartLabel" type="Label" parent="StartFrame/Margin"]
+layout_mode = 2
+text = "点击回车键进入游戏"
+horizontal_alignment = 1
+vertical_alignment = 1
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+theme_override_colors/font_outline_color = Color(0, 0, 0, 1)
+theme_override_constants/outline_size = 6
+theme_override_font_sizes/font_size = 48
+
+[node name="ControlsLabel" type="Label" parent="."]
+anchor_left = 0.0
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_top = -70.0
+offset_bottom = -24.0
+grow_horizontal = 2
+grow_vertical = 0
+text = "操作方式：W-上跳    S-下跳    A-向左移动    D-向右移动    回车-释放技能"
+horizontal_alignment = 1
+vertical_alignment = 1
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+theme_override_colors/font_outline_color = Color(0, 0, 0, 1)
+theme_override_constants/outline_size = 5
+theme_override_font_sizes/font_size = 28

@@ -2,6 +2,7 @@ extends CharacterBody2D
 class_name Player
 
 const SPEED := 500.0
+const ACCELERATION := 5000.0
 const JUMP_VELOCITY := -1520.0
 const GRAVITY := 4000.0
 const SUCK_FORCE := 3000.0
@@ -56,6 +57,10 @@ var last_damage_frame: int = -1000
 var invincible: bool = false
 var invincible_timer: float = 0.0
 var is_switching_platform: bool = false
+var _death_sequence_playing: bool = false
+var _death_followup_started: bool = false
+var _death_anim_index: int = 0
+var _death_anim_accumulator: float = 0.0
 var anim_state: String = "idle"
 var anim_frame: int = 0
 var suction_anim_frame: int = 0
@@ -67,6 +72,7 @@ const SUCTION_ANIM_SPEED := 0.03
 const ANIM_FRAME_INTERVAL := {
 	"walk": 0.06,
 	"inhale_walk": 0.06,
+	"die": 0.08,
 }
 var _anim_accumulator: float = 0.0
 
@@ -101,6 +107,21 @@ const TEX_PATHS := {
 					"res://assets/sprites/ZhongKui/InhaleWalk/Zhongkui_InhaleWalk_08.png"],
 	"shoot":  ["res://assets/sprites/ZhongKui/Inhale/ZhongKui_Inhale_01.png"],
 	"hurt":   ["res://assets/sprites/ZhongKui/idle/ZhongKui_idle_01.png"],
+	# 死亡动画：生命值耗尽时播放一次（不循环），共 14 帧
+	"die":    ["res://assets/sprites/ZhongKui/Die/ZhongKui_Die_01.png",
+			   "res://assets/sprites/ZhongKui/Die/ZhongKui_Die_02.png",
+			   "res://assets/sprites/ZhongKui/Die/ZhongKui_Die_03.png",
+			   "res://assets/sprites/ZhongKui/Die/ZhongKui_Die_04.png",
+			   "res://assets/sprites/ZhongKui/Die/ZhongKui_Die_05.png",
+			   "res://assets/sprites/ZhongKui/Die/ZhongKui_Die_06.png",
+			   "res://assets/sprites/ZhongKui/Die/ZhongKui_Die_07.png",
+			   "res://assets/sprites/ZhongKui/Die/ZhongKui_Die_08.png",
+			   "res://assets/sprites/ZhongKui/Die/ZhongKui_Die_09.png",
+			   "res://assets/sprites/ZhongKui/Die/ZhongKui_Die_10.png",
+			   "res://assets/sprites/ZhongKui/Die/ZhongKui_Die_11.png",
+			   "res://assets/sprites/ZhongKui/Die/ZhongKui_Die_12.png",
+			   "res://assets/sprites/ZhongKui/Die/ZhongKui_Die_13.png",
+			   "res://assets/sprites/ZhongKui/Die/ZhongKui_Die_14.png"],
 }
 
 const SUCTION_TEX_PATHS := [
@@ -343,12 +364,16 @@ func _draw() -> void:
 	# 消失点紫色十字由 $VanishMarker 子节点绘制（确保在 Sprite/SuctionVisual 之上）
 
 func _physics_process(delta: float) -> void:
+	if _death_sequence_playing:
+		_tick_death_sequence(delta)
+		return
 	if not is_on_floor():
 		velocity.y += GRAVITY * delta
 
 	var input_x := Input.get_axis("move_left", "move_right")
 	if input_x != 0.0:
-		velocity.x = input_x * SPEED
+		# 逐渐加速到目标速度，避免快速点击时一下移动太远
+		velocity.x = move_toward(velocity.x, input_x * SPEED, ACCELERATION * delta)
 		facing_right = input_x > 0.0
 	else:
 		velocity.x = move_toward(velocity.x, 0.0, SPEED * 4.0 * delta)
@@ -386,10 +411,14 @@ func _physics_process(delta: float) -> void:
 
 
 	move_and_slide()
+	if _death_sequence_playing:
+		return
 	if is_switching_platform and is_on_floor():
 		is_switching_platform = false
 		_damage_from_overlapping_enemy()
 	_clamp_to_world()
+	if _death_sequence_playing:
+		return
 	_update_facing()
 	_apply_suction(delta)
 	_tick_in_flight_enemies()
@@ -549,6 +578,8 @@ func _update_carried_enemy_position() -> void:
 	pass
 
 func _update_animation_state() -> void:
+	if _death_sequence_playing:
+		return
 	var new_state: String
 	if anim_state == "hurt" and invincible_timer > HURT_INVINCIBLE_TIME - 0.3:
 		new_state = "hurt"
@@ -598,14 +629,13 @@ func _apply_frame() -> void:
 	sprite.texture = frames[anim_frame % frames.size()]
 
 func take_damage() -> void:
-	if GameState.lives <= 0:
+	if GameState.lives <= 0 or _death_sequence_playing:
 		return
-	GameState.lose_life()
+	if GameState.lose_life() <= 0:
+		_play_death_sequence()
+		return
 	anim_state = "hurt"
 	_apply_frame()
-	if GameState.lives <= 0:
-		await GameState.wait(self, 0.5)
-		GameState.call_deferred("goto_game_over")
 
 func ignores_boss_ghost_fire_damage() -> bool:
 	return not is_on_floor()
@@ -663,6 +693,8 @@ func _on_hurt_box_area_entered(_area: Area2D) -> void:
 	pass
 
 func _clamp_to_world() -> void:
+	if _death_sequence_playing:
+		return
 	# Left/Right boundaries
 	if position.x < WORLD_LEFT + BODY_HALF_W:
 		position.x = WORLD_LEFT + BODY_HALF_W
@@ -682,16 +714,83 @@ func _clamp_to_world() -> void:
 		_respawn()
 
 func _respawn() -> void:
-	var level = get_parent().get_parent()
-	if level and level.has_method("get_spawn_pos"):
+	if _death_sequence_playing:
+		return
+	var level := _get_level()
+	if level != null and level.has_method("get_spawn_pos"):
 		position = level.get_spawn_pos()
 	else:
 		position = Vector2(100, 500)
 	velocity = Vector2.ZERO
-	GameState.lose_life()
+	if GameState.lose_life() <= 0:
+		_play_death_sequence()
+		return
 	invincible = true
 	invincible_timer = 2.0
 	hurt_box.set_deferred("monitoring", false)
+
+func _get_level() -> Node:
+	var parent := get_parent()
+	if parent == null:
+		return null
+	return parent.get_parent()
+
+func _play_death_sequence() -> void:
+	if _death_sequence_playing:
+		return
+	_death_sequence_playing = true
+	_death_followup_started = false
+	_death_anim_index = 0
+	_death_anim_accumulator = 0.0
+	velocity = Vector2.ZERO
+	invincible = false
+	invincible_timer = 0.0
+	is_vacuuming = false
+	is_charging_vacuum = false
+	vacuum_charge_timer = 0.0
+	vacuum_armed = false
+	hold_warning.visible = false
+	suction_visual.visible = false
+	suction_area.monitoring = false
+	hurt_box.set_deferred("monitoring", false)
+	collision.set_deferred("disabled", true)
+	anim_timer.stop()
+	anim_state = "die"
+	anim_frame = 0
+
+	var level := _get_level()
+	if level != null and level.has_method("lock_for_game_over"):
+		level.lock_for_game_over()
+
+	var frames: Array = _textures.get("die", [])
+	if frames.is_empty():
+		push_warning("Death animation frames not found for ZhongKui.")
+		call_deferred("_start_death_followup")
+		return
+
+	sprite.texture = frames[0]
+
+func _tick_death_sequence(delta: float) -> void:
+	if not _death_sequence_playing:
+		return
+	var frames: Array = _textures.get("die", [])
+	if frames.is_empty():
+		call_deferred("_start_death_followup")
+		return
+	var interval: float = ANIM_FRAME_INTERVAL.get("die", 0.08)
+	_death_anim_accumulator += delta
+	while _death_anim_accumulator >= interval and _death_anim_index < frames.size() - 1:
+		_death_anim_accumulator -= interval
+		_death_anim_index += 1
+		sprite.texture = frames[_death_anim_index]
+	if _death_anim_index >= frames.size() - 1:
+		call_deferred("_start_death_followup")
+
+func _start_death_followup() -> void:
+	if _death_followup_started:
+		return
+	_death_followup_started = true
+	GameState.goto_game_over()
 
 func _try_drop_through_platform() -> void:
 	for i in range(get_slide_collision_count()):

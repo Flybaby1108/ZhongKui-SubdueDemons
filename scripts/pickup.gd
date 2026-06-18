@@ -9,6 +9,8 @@ enum Type { APPLE, CHERRY, STAR, HEART, COIN }
 # COIN 序列帧动画速度（秒/帧）
 const COIN_ANIM_SPEED := 0.1
 const COIN_PICKUP_SFX_PATH := "res://assets/audio/Zhongkui_Inhale_CoinFalls.mp3"
+# 元宝（STAR）被钟馗拾取时播放的音效
+const YUANBAO_PICKUP_SFX_PATH := "res://assets/audio/Yuanbao.mp3"
 
 # STAR (元宝) 间歇式动画：每 2 秒触发一次 4 帧序列，播完回到第 1 帧停留
 const STAR_IDLE_INTERVAL := 2.0   # 两次播放之间的间隔（秒）
@@ -197,11 +199,11 @@ func _on_body_entered(body: Node) -> void:
 		if pickup_type == Type.COIN:
 			_play_pickup_fly_to_hud("play_coin_pickup_fly")
 			GameState.add_coin()
-			_play_coin_pickup_sfx()
+			_play_pickup_sfx(COIN_PICKUP_SFX_PATH)
 		elif pickup_type == Type.STAR:
 			_play_pickup_fly_to_hud("play_yuanbao_pickup_fly")
 			GameState.add_yuanbao()
-			_play_coin_pickup_sfx()
+			_play_pickup_sfx(YUANBAO_PICKUP_SFX_PATH)
 	call_deferred("queue_free")
 
 func _play_pickup_fly_to_hud(method_name: StringName) -> void:
@@ -229,8 +231,8 @@ func _get_sprite_screen_size() -> Vector2:
 	var down := canvas_transform * (global_position + Vector2(0.0, visual_size.y))
 	return Vector2(origin.distance_to(right), origin.distance_to(down))
 
-func _play_coin_pickup_sfx() -> void:
-	var stream := load(COIN_PICKUP_SFX_PATH)
+func _play_pickup_sfx(sfx_path: String) -> void:
+	var stream := load(sfx_path)
 	if stream == null:
 		return
 	stream = stream.duplicate()
@@ -242,7 +244,7 @@ func _play_coin_pickup_sfx() -> void:
 	if sfx_parent == null:
 		return
 	var sfx := AudioStreamPlayer.new()
-	sfx.name = "CoinPickupSfx"
+	sfx.name = "PickupSfx"
 	sfx.stream = stream
 	sfx_parent.add_child(sfx)
 	sfx.finished.connect(sfx.queue_free)

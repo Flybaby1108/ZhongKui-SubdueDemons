@@ -26,10 +26,14 @@ const FADE_END_FRAME   := 278   # 此帧结束时 alpha = 0（1-indexed）
 const BG_FRAME_COUNT    := 46
 const BG_FRAME_INTERVAL := 0.05   # 20fps
 
-@onready var bg_layer:  TextureRect       = $BgLayer
-@onready var cg_layer:  TextureRect       = $CgLayer
-@onready var music:     AudioStreamPlayer = $Music
-@onready var skip_label: Label            = $SkipLabel
+@onready var bg_layer:      TextureRect       = $BgLayer
+@onready var cg_layer:      TextureRect       = $CgLayer
+@onready var music:         AudioStreamPlayer = $Music
+@onready var skip_label:    Label             = $SkipLabel
+@onready var black_overlay: ColorRect         = $BlackOverlay
+@onready var start_frame:   PanelContainer    = $StartFrame
+@onready var start_label:   Label             = $StartFrame/Margin/StartLabel
+@onready var controls_label: Label            = $ControlsLabel
 
 # 帧数组（同步异步加载均可；这里用同步 load，CG 279 帧 × ~200KB JPEG ≈ 50MB，
 # 在 _ready 里统一加载让帧率最稳定）
@@ -45,6 +49,13 @@ var _bg_anim_t:    float = 0.0
 
 # 跳过动画（标签闪烁）
 var _skip_blink_t: float = 0.0
+
+# 开场等待：CG 播放前先显示「点击回车键进入游戏」并有节奏地闪烁，按回车后才开始播放
+var _started:        bool  = false   # 是否已开始播放 CG
+var _start_blink_t:  float = 0.0     # 开场提示语闪烁计时器
+const START_BLINK_PERIOD := 1.0      # 闪烁周期（秒），节奏明快
+const START_BLINK_MIN_ALPHA := 0.15  # 最暗
+const START_BLINK_MAX_ALPHA := 1.0   # 最亮
 
 func _ready() -> void:
 	GameState.prepare_start_sequence_music()
@@ -81,13 +92,31 @@ func _ready() -> void:
 	if not _cg_frames.is_empty():
 		cg_layer.texture = _cg_frames[0]
 
+	# CgLayer 初始完全不透明（从第 1 帧开始全覆盖 BgLayer）
+	cg_layer.modulate.a = 1.0
+
+	# 开场等待：先用黑色背景遮住 CG，显示带边框的「点击回车键进入游戏」并闪烁，
+	# 待玩家按回车（ui_accept）后再调用 _begin_play() 开始播放 CG 与配乐。
+	black_overlay.visible = true
+	start_frame.visible   = true
+	start_label.visible   = true
+	controls_label.visible = true
+	skip_label.visible    = false
+
+func _begin_play() -> void:
+	if _started:
+		return
+	_started = true
+	black_overlay.visible = false
+	start_frame.visible   = false
+	start_label.visible   = false
+	controls_label.visible = false
+	skip_label.visible    = true
+
 	# 播放配乐
 	if music.stream != null:
 		GameState.register_intro_music_player(music)
 		music.play()
-
-	# CgLayer 初始完全不透明（从第 1 帧开始全覆盖 BgLayer）
-	cg_layer.modulate.a = 1.0
 
 func _exit_tree() -> void:
 	release_cached_resources_for_quit()
@@ -114,6 +143,15 @@ func release_cached_resources_for_quit() -> void:
 
 func _process(delta: float) -> void:
 	if _cg_done:
+		return
+
+	# ── 开场等待阶段：CG 停在第一帧，提示语有节奏地闪烁 ──────────────
+	if not _started:
+		_start_blink_t += delta
+		var start_phase := fmod(_start_blink_t, START_BLINK_PERIOD) / START_BLINK_PERIOD
+		# 边框与文字一起按固定节奏明暗变化
+		var blink := 0.5 - 0.5 * cos(start_phase * TAU)
+		start_frame.modulate.a = lerp(START_BLINK_MIN_ALPHA, START_BLINK_MAX_ALPHA, blink)
 		return
 
 	# ── BgLayer 持续循环（始终在后面跑） ──────────────────────────
@@ -163,8 +201,12 @@ func _process(delta: float) -> void:
 func _input(event: InputEvent) -> void:
 	if event.is_action_pressed("ui_accept"):
 		get_viewport().set_input_as_handled()
-		# 玩家按回车跳过：终止 CGv1.mp3 播放
-		_finish(true)
+		if not _started:
+			# 开场等待阶段按回车：开始播放 CG
+			_begin_play()
+		else:
+			# CG 播放中按回车跳过：终止 CGv1.mp3 播放
+			_finish(true)
 
 func _finish(skipped: bool = false) -> void:
 	if _cg_done:

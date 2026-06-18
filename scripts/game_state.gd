@@ -285,11 +285,10 @@ func add_yuanbao(amount: int = 1) -> void:
 	yuanbao += amount
 	yuanbao_changed.emit(yuanbao)
 
-func lose_life() -> void:
-	lives -= 1
+func lose_life() -> int:
+	lives = max(0, lives - 1)
 	lives_changed.emit(lives)
-	if lives <= 0:
-		call_deferred("goto_game_over")
+	return lives
 
 func gain_life() -> void:
 	if lives < MAX_LIVES:
