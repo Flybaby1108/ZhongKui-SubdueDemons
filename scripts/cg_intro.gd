@@ -47,6 +47,13 @@ var _cg_done:     bool   = false # 所有 CG 帧播完且淡出完成标志
 var _bg_frame_idx: int   = 0
 var _bg_anim_t:    float = 0.0
 
+# GPU 纹理预热：用一个 1×1 离屏 TextureRect 逐帧贴上每张 BG，强制 GPU 上传。
+var _warm_rect:      TextureRect = null
+var _warm_idx:       int  = 0     # 下一张待预热的 BG 帧索引
+var _warm_done:      bool = false # 全部 46 帧是否已预热完成
+# 每个渲染帧只能可靠预热 1 张：同一帧多次给 .texture 赋值，只有最后一次会被真实
+# 渲染上传。46 张在开场等待 + CG 播放（远超 46 个渲染帧）期间足以全部预热完成。
+
 # 跳过动画（标签闪烁）
 var _skip_blink_t: float = 0.0
 
@@ -73,16 +80,22 @@ func _ready() -> void:
 		_bg_frames.append(load(path))
 	if not _bg_frames.is_empty():
 		bg_layer.texture = _bg_frames[0]
-		# 在 CG 期间把每张 BG 都贴上 bg_layer 一次，强制 GPU 完成纹理上传 / 预热，
-		# 这样切到 main_menu 时第一帧不会因首次上传 1920×1080×46 而卡顿。
-		# 利用 RenderingServer 直接获取 RID，无需真的渲染。
-		for tex in _bg_frames:
-			if tex != null:
-				# 触发底层 RID 创建（Texture2D.get_rid() 会确保 GPU 资源就绪）
-				var _rid := (tex as Texture2D).get_rid()
 
 	# 存入 autoload 共享缓存，main_menu 切场景后直接复用，零 IO 零卡顿
 	GameState.shared_start_bg_frames = _bg_frames
+
+	# GPU 纹理预热：把每张 BG 帧贴到一个 1×1 的离屏 TextureRect 上并真实渲染，
+	# 强制 RenderingServer 在 CG 播放期间完成 46 张 1920×1080 纹理的 GPU 上传。
+	#
+	# 为什么不能用 Texture2D.get_rid() 预热：get_rid() 只创建/返回资源 RID，纹理
+	# 数据的实际 GPU 上传发生在该纹理「第一次被真正渲染」时。CG 期间 BgLayer 被
+	# CgLayer（alpha=1.0）完全遮挡，渲染器会裁掉被完全遮挡的绘制，BG 帧从未真正
+	# 上传。结果切到 main_menu 第一轮轮播时，46 张帧才陆续首次上传 GPU，与场景
+	# 初始化叠在切换瞬间，造成肉眼可见卡顿。
+	#
+	# 这里用一个最小尺寸、几乎不可见的 _warm_rect 在 CG 播放过程中每帧轮换贴图，
+	# 让每张 BG 都被真实绘制一次，从而提前完成 GPU 上传。
+	_setup_texture_warmup()
 
 	# 加载 CG 帧（279 帧，~50MB JPEG，同步 load）
 	_cg_frames = []
@@ -102,6 +115,41 @@ func _ready() -> void:
 	start_label.visible   = true
 	controls_label.visible = true
 	skip_label.visible    = false
+
+func _setup_texture_warmup() -> void:
+	if _bg_frames.is_empty():
+		_warm_done = true
+		return
+	# 1×1 像素、放在屏幕角落、几乎透明的 TextureRect。它会被真实渲染（不会被
+	# 任何东西完全遮挡），因此贴上去的纹理会被 RenderingServer 真正上传到 GPU。
+	_warm_rect = TextureRect.new()
+	_warm_rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	_warm_rect.stretch_mode = TextureRect.STRETCH_SCALE
+	_warm_rect.custom_minimum_size = Vector2(1, 1)
+	_warm_rect.size = Vector2(1, 1)
+	_warm_rect.position = Vector2.ZERO
+	# modulate.a 极低但非 0：alpha=0 时渲染器可能跳过绘制，无法触发上传。
+	_warm_rect.modulate.a = 0.01
+	_warm_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	# 置于最上层，确保不被 CgLayer / BlackOverlay 遮挡而被裁剪。
+	add_child(_warm_rect)
+	_warm_rect.z_index = 100
+	_warm_rect.texture = _bg_frames[0]
+
+func _process_texture_warmup() -> void:
+	# 每个渲染帧把若干张 BG 帧贴到离屏 _warm_rect 上。被贴上的纹理会在本帧真实
+	# 渲染中完成 GPU 上传。全部上传完毕后移除预热节点。
+	if _warm_done or _warm_rect == null:
+		return
+	if _warm_idx >= _bg_frames.size():
+		_warm_done = true
+		_warm_rect.queue_free()
+		_warm_rect = null
+		return
+	var tex = _bg_frames[_warm_idx]
+	if tex != null:
+		_warm_rect.texture = tex
+	_warm_idx += 1
 
 func _begin_play() -> void:
 	if _started:
@@ -138,12 +186,19 @@ func release_cached_resources_for_quit() -> void:
 		bg_layer.texture = null
 	if is_instance_valid(cg_layer):
 		cg_layer.texture = null
+	if is_instance_valid(_warm_rect):
+		_warm_rect.texture = null
 	_bg_frames.clear()
 	_cg_frames.clear()
 
 func _process(delta: float) -> void:
 	if _cg_done:
 		return
+
+	# ── GPU 纹理预热：在开场等待 + CG 播放期间分摊完成所有 BG 帧的 GPU 上传 ──
+	# 趁玩家还在看开场提示语 / CG 时把 46 张 BG 帧逐帧真实渲染上传，
+	# 这样切到 main_menu 时第一轮轮播不会因首次上传而卡顿。
+	_process_texture_warmup()
 
 	# ── 开场等待阶段：CG 停在第一帧，提示语有节奏地闪烁 ──────────────
 	if not _started:
