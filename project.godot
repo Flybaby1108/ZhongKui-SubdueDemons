@@ -10,8 +10,8 @@ config_version=5
 
 [application]
 
-config/name="Vacuum Cleaner Master"
-config/description="A 2D pixel platformer inspired by Tumble Pop. Vacuum enemies and shoot them out!"
+config/name="钟馗伏魔记"
+config/description="一款以钟馗伏魔为题材的 2D 像素平台动作游戏：吸入妖魔再喷射反击。"
 run/main_scene="res://scenes/cg_intro.tscn"
 config/features=PackedStringArray("4.6", "GL Compatibility")
 config/icon="res://icon.svg"
