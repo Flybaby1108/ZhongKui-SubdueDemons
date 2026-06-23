@@ -15,9 +15,9 @@ dest_files=["res://.godot/imported/Chapter_BG_07.jpg-1f4ee99491ccba81e206624460c
 
 [params]
 
-compress/mode=0
+compress/mode=1
 compress/high_quality=false
-compress/lossy_quality=0.7
+compress/lossy_quality=0.9
 compress/uastc_level=0
 compress/rdo_quality_loss=0.0
 compress/hdr_compression=1

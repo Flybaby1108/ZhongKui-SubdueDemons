@@ -369,6 +369,8 @@ func _physics_process(delta: float) -> void:
 	if _death_sequence_playing:
 		_tick_death_sequence(delta)
 		return
+	if _sync_death_sequence_with_lives():
+		return
 	if not is_on_floor():
 		velocity.y += GRAVITY * delta
 
@@ -643,7 +645,9 @@ func _apply_frame() -> void:
 	sprite.texture = frames[anim_frame % frames.size()]
 
 func take_damage() -> void:
-	if GameState.lives <= 0 or _death_sequence_playing:
+	if _death_sequence_playing:
+		return
+	if _sync_death_sequence_with_lives():
 		return
 	if GameState.lose_life() <= 0:
 		_play_death_sequence()
@@ -736,6 +740,8 @@ func _clamp_to_world() -> void:
 func _respawn() -> void:
 	if _death_sequence_playing:
 		return
+	if _sync_death_sequence_with_lives():
+		return
 	var level := _get_level()
 	if level != null and level.has_method("get_spawn_pos"):
 		position = level.get_spawn_pos()
@@ -748,6 +754,15 @@ func _respawn() -> void:
 	invincible = true
 	invincible_timer = 2.0
 	hurt_box.set_deferred("monitoring", false)
+
+func _sync_death_sequence_with_lives() -> bool:
+	# 某些关卡事件/伤害链可能先把全局 lives 扣到 0，再回到 player 主循环；
+	# 若这里只是 early-return，钟馗会卡在“0 命但未进入死亡序列”的悬挂状态。
+	# 统一在玩家主链路里兜底同步，保证 lives 归零一定切入死亡流程。
+	if GameState.lives > 0:
+		return false
+	_play_death_sequence()
+	return true
 
 func _get_level() -> Node:
 	var parent := get_parent()

@@ -15,9 +15,9 @@ dest_files=["res://.godot/imported/CGv1_199.jpg-3e7b7a65701590d660982d3c61fa0aed
 
 [params]
 
-compress/mode=0
+compress/mode=1
 compress/high_quality=false
-compress/lossy_quality=0.7
+compress/lossy_quality=0.9
 compress/uastc_level=0
 compress/rdo_quality_loss=0.0
 compress/hdr_compression=1

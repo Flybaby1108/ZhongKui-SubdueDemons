@@ -15,9 +15,9 @@ dest_files=["res://.godot/imported/ZhongKui_Die_09.png-0395a222a5b00de784b0ff4ff
 
 [params]
 
-compress/mode=0
+compress/mode=1
 compress/high_quality=false
-compress/lossy_quality=0.7
+compress/lossy_quality=0.9
 compress/uastc_level=0
 compress/rdo_quality_loss=0.0
 compress/hdr_compression=1
