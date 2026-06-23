@@ -51,7 +51,6 @@ var _fs_idx: int = 0
 var _fs_t: float = 0.0
 var _is_fire_skull: bool = false
 var _free_queued: bool = false
-var collision_sfx: AudioStreamPlayer = null
 
 @onready var sprite: Sprite2D = $Sprite
 @onready var hit_area: Area2D = $HitArea
@@ -60,39 +59,12 @@ func _ready() -> void:
 	add_to_group(ACTIVE_BALL_GROUP)
 	hit_area.body_entered.connect(_on_hit_body)
 	hit_area.area_entered.connect(_on_hit_area)
-	_setup_collision_sfx()
 	# 监听调参变化，实时同步 sprite scale
 	CharTuning.tuning_changed.connect(_apply_tuning)
-	print("[BALL DEBUG] _ready: hit_area.collision_mask=", hit_area.collision_mask, " hit_area.monitoring=", hit_area.monitoring, " hit_area shape valid=", hit_area.get_node("HitShape").shape != null)
 
 func _exit_tree() -> void:
 	if CharTuning.tuning_changed.is_connected(_apply_tuning):
 		CharTuning.tuning_changed.disconnect(_apply_tuning)
-
-func _setup_collision_sfx() -> void:
-	collision_sfx = AudioStreamPlayer.new()
-	collision_sfx.name = "CollisionSfx"
-	collision_sfx.max_polyphony = 8
-	var stream := load(COLLISION_SFX_PATH)
-	if stream != null:
-		stream = stream.duplicate()
-		if stream is AudioStreamMP3:
-			stream.loop = false
-		collision_sfx.stream = stream
-	add_child(collision_sfx)
-
-func _play_enemy_hit_sfx() -> void:
-	if collision_sfx == null or collision_sfx.stream == null:
-		return
-	var sfx_parent := get_parent()
-	if sfx_parent == null:
-		sfx_parent = self
-	var hit_sfx := AudioStreamPlayer.new()
-	hit_sfx.name = "EnemyHitSfx"
-	hit_sfx.stream = collision_sfx.stream
-	sfx_parent.add_child(hit_sfx)
-	hit_sfx.finished.connect(hit_sfx.queue_free)
-	hit_sfx.play()
 
 func _apply_tuning() -> void:
 	# FireSkull 形态：用 boss_skull_scale，不受 ball_sprite_scale 控制
@@ -158,7 +130,6 @@ func _physics_process(delta: float) -> void:
 	_check_boss_hurt_hits()
 
 func _on_hit_body(body: Node) -> void:
-	print("[BALL DEBUG] _on_hit_body fired. body=", body, " is_Boss=", body is Boss, " is_Enemy=", body is Enemy, " body.name=", body.name if body else "<null>")
 	if body != null and body.is_in_group("boss_ghost_fire"):
 		if body.has_method("_queue_free_deferred"):
 			body.call_deferred("_queue_free_deferred")
@@ -174,7 +145,26 @@ func _on_hit_body(body: Node) -> void:
 		if "summon_invuln_t" in body and body.summon_invuln_t > 0.0:
 			return
 		already_hit.append(body)
-		call_deferred("_resolve_enemy_hit", body, body.global_position)
+		# 在信号回调里立刻捕获掉落所需的父节点引用：此刻球一定还在场景树内。
+		var drop_parent: Node = get_parent()
+		# 关键修复：用一个一次性 Callable 把「击杀+掉落」推迟到下一空闲帧执行，且这个
+		# Callable 不依赖球实例存活。
+		#
+		# 旧写法 `call_deferred("_resolve_enemy_hit", ...)` 把回调绑定在球自己身上：
+		# 球生命周期极短（roll_timer 到期 / 撞墙 / 滚出屏幕都会 _queue_free_deferred），
+		# 在某些平台（如 Windows Chrome）物理帧与 idle 帧的 deferred flush 时序下，球
+		# 可能在该回调被 flush 之前就 queue_free —— 一旦球实例失效，Godot 会「直接跳过」
+		# 绑定在它上面的 deferred 调用，导致击杀/掉落整个不执行（表现为"鬼球打死敌人
+		# 完全不掉落铜钱/元宝"）。
+		#
+		# 改为把所需数据（敌人、命中位置、掉落类型、父节点）全部作为参数传给静态函数，
+		# 并用 Callable.call_deferred 推迟到下一空闲帧执行 —— 静态函数不绑定球实例，
+		# 即使球已 queue_free 也照常执行。
+		var hit_pos: Vector2 = body.global_position
+		var pickup_t: int = drop_pickup_type
+		var target_enemy: Enemy = body
+		var resolve_call := Callable(Ball, "_resolve_enemy_hit_static")
+		resolve_call.bind(target_enemy, hit_pos, pickup_t, drop_parent).call_deferred()
 
 func _on_hit_area(area: Area2D) -> void:
 	if area != null and area.is_in_group("boss_ghost_fire"):
@@ -183,34 +173,59 @@ func _on_hit_area(area: Area2D) -> void:
 		else:
 			area.call_deferred("queue_free")
 
-func _resolve_enemy_hit(enemy: Enemy, hit_position: Vector2) -> void:
+# 静态版本：不依赖任何 Ball 实例存活（球可能已被 queue_free）。
+# 所有依赖（敌人、命中位置、掉落类型、稳定父节点）都通过参数传入。
+static func _resolve_enemy_hit_static(enemy: Enemy, hit_position: Vector2, pickup_type: int, drop_parent: Node) -> void:
 	if not is_instance_valid(enemy) or enemy.dying:
 		return
 	if enemy.enemy_type == Enemy.Type.FAT_DEMON_KING:
-		_play_enemy_hit_sfx()
+		_play_enemy_hit_sfx_static(drop_parent)
 		enemy.take_damage(1)
 		if enemy.dying:
-			_drop_reward(hit_position)
+			_drop_reward_static(hit_position, pickup_type, drop_parent)
 		return
 	# 每个被滚动 ball 撞死的敌人按本次吸入数量爆 1 个奖励：
 	# 1-2 只掉铜钱，3-5 只掉元宝。
-	_drop_reward(hit_position)
-	_play_enemy_hit_sfx()
+	_drop_reward_static(hit_position, pickup_type, drop_parent)
+	_play_enemy_hit_sfx_static(drop_parent)
 	enemy.die()
 
-func _drop_reward(at: Vector2) -> void:
-	var parent = get_parent()
+static func _drop_reward_static(at: Vector2, pickup_type: int, drop_parent: Node) -> void:
+	# 优先使用碰撞瞬间在信号回调里捕获的稳定父节点（关卡场景），它在掉落时一定还存活。
+	var parent: Node = drop_parent if (drop_parent != null and is_instance_valid(drop_parent) and drop_parent.is_inside_tree()) else null
+	if parent == null:
+		# 兜底：父节点失效时挂到当前场景，确保铜钱/元宝一定生成出来。
+		var loop := Engine.get_main_loop()
+		if loop is SceneTree:
+			parent = (loop as SceneTree).current_scene
 	if parent == null:
 		return
 	var reward = PICKUP_SCENE.instantiate()
-	reward.pickup_type = drop_pickup_type
+	reward.pickup_type = pickup_type
 	parent.add_child(reward)
 	# 在敌人位置生成奖励；道具自身有重力 + 地面探测，会自动落到正下方最近的平台/地面上
 	# （即使敌人当时在空中、悬崖边、平台上方多层结构等情况都能正确处理）
-	if drop_pickup_type == Pickup.Type.STAR:
+	if pickup_type == Pickup.Type.STAR:
 		reward.global_position = at + Vector2(CharTuning.drop_yuanbao_offset_x, CharTuning.drop_yuanbao_offset_y)
 	else:
 		reward.global_position = at
+
+# 静态命中音效：挂到稳定父节点上播放，不依赖球实例（球可能已销毁）。
+static func _play_enemy_hit_sfx_static(sfx_parent: Node) -> void:
+	if sfx_parent == null or not is_instance_valid(sfx_parent) or not sfx_parent.is_inside_tree():
+		return
+	var stream := load(COLLISION_SFX_PATH)
+	if stream == null:
+		return
+	stream = stream.duplicate()
+	if stream is AudioStreamMP3:
+		stream.loop = false
+	var hit_sfx := AudioStreamPlayer.new()
+	hit_sfx.name = "EnemyHitSfx"
+	hit_sfx.stream = stream
+	sfx_parent.add_child(hit_sfx)
+	hit_sfx.finished.connect(hit_sfx.queue_free)
+	hit_sfx.play()
 
 func _check_boss_hurt_hits() -> void:
 	for boss in get_tree().get_nodes_in_group("boss"):
@@ -224,7 +239,6 @@ func _try_hit_boss(boss: Boss) -> void:
 		return
 	already_hit.append(boss)
 	boss.take_damage(1)
-	print("[BALL DEBUG] Boss damaged! HP now=", boss.health)
 
 func _get_hit_rect_global() -> Rect2:
 	var hit_shape: CollisionShape2D = hit_area.get_node("HitShape")
