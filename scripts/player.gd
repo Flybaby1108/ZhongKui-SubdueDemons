@@ -575,13 +575,17 @@ func _explode() -> void:
 			enemy.call_deferred("queue_free")
 	captured_enemies.clear()
 	hold_timer = 0.0
+	# 已在死亡序列中：不重复触发，避免葫芦超时与受击致死同帧叠加。
+	if _death_sequence_playing:
+		return
+	# 葫芦引爆视为致命：清空生命（HUD 三心全灭），然后走与受击/坠落死亡完全
+	# 一致的死亡序列。绝不能只设 lives=0 + 直接 goto_game_over —— 那条路径在
+	# goto_game_over 被守卫（_level_cleared / _game_over_queued）拦截时会留下
+	# “lives=0 但钟馗仍存活”的悬挂状态：此后 take_damage() 因 lives<=0 提前
+	# return，钟馗再也不会扣命/受伤/死亡（ChapterBoss 关卡“生命耗尽却不死”Bug）。
 	GameState.lives = 0
 	GameState.lives_changed.emit(0)
-	await GameState.wait(self, 0.3)
-	# 等待期间若已离开场景树（切场景 / 退出），不再跳转，避免协程残留与无效操作。
-	if not is_inside_tree():
-		return
-	GameState.goto_game_over()
+	_play_death_sequence()
 
 func _update_carried_enemy_position() -> void:
 	# 敌人被吸入葫芦后已隐藏，不再需要更新位置
