@@ -3,9 +3,14 @@ extends Node
 const CONFIG_PATH := "user://char_tuning.cfg"
 # Browser builds keep user:// across GitHub Pages deployments. Increment this
 # whenever baked enemy calibration must replace previously saved Web values.
-const ENEMY_TUNING_VERSION := 1
-const FDK_MECHANISM_TUNING_VERSION := 4
-const FDK_HUD_TUNING_VERSION := 1
+const ENEMY_TUNING_VERSION := 2
+const FDK_MECHANISM_TUNING_VERSION := 5
+const FDK_HUD_TUNING_VERSION := 2
+# 钟馗本体（char 段）与通用 HUD（ui 段：红心/头像/铜钱/元宝/倒计时/标题）以前未做版本门控，
+# 导致 Web 版玩家旧的 user:// 存档会一直覆盖出厂校准。新增版本号后，旧存档会被自动丢弃并
+# 用最新 baked 默认值重写。出厂校准变更时必须递增对应版本号。
+const CHAR_TUNING_VERSION := 1
+const UI_TUNING_VERSION := 1
 
 signal tuning_changed
 
@@ -17,20 +22,20 @@ signal tuning_changed
 # ENEMY_TUNING_VERSION，让旧的敌人尺寸和碰撞范围自动迁移。
 # 若要重新出厂校准：1) 用 F1 调好  2) 复制 user://char_tuning.cfg 数值过来覆盖这里。
 # ─────────────────────────────────────────────────────────────────────────
-var sprite_scale: float = 0.34
+var sprite_scale: float = 0.46
 var sprite_offset_x: float = 0.0
 var sprite_offset_y: float = 0.0
-var body_width: float = 100.0
-var body_height: float = 116.0
-var body_offset_y: float = 21.0
-var suction_offset_x: float = 208.0
-var suction_offset_y: float = -24.0
-var suction_width: float = 292.0
-var suction_height: float = 176.0
-var hold_warning_offset_y: float = -196.0
+var body_width: float = 80.0
+var body_height: float = 138.0
+var body_offset_y: float = 11.0
+var suction_offset_x: float = 224.0
+var suction_offset_y: float = -8.0
+var suction_width: float = 324.0
+var suction_height: float = 116.0
+var hold_warning_offset_y: float = -136.0
 var inhale_fx_scale: float = 0.71
 var inhale_fx_offset_x: float = 70.0
-var inhale_fx_offset_y: float = -16.0
+var inhale_fx_offset_y: float = -12.0
 var mh_sprite_scale: float = 0.45
 var mh_sprite_offset_x: float = 17.0
 var mh_sprite_offset_y: float = -127.0
@@ -56,41 +61,41 @@ var pz_col_offset_x: float = 12.0
 var pz_col_offset_y: float = -34.0
 var pz_col_width: float = 62.0
 var pz_col_height: float = 118.0
-var fdk_sprite_scale: float = 0.42
-var fdk_sprite_offset_x: float = 0.0
-var fdk_sprite_offset_y: float = -166.0
-var fdk_col_offset_x: float = 18.0
-var fdk_col_offset_y: float = -108.0
-var fdk_col_width: float = 138.0
-var fdk_col_height: float = 204.0
-var fdk_col_scale: float = 1.0
-var fdk_mechanism_pos_x: float = 0.0
-var fdk_mechanism_pos_y: float = 0.0
-var fdk_mechanism_scale: float = 1.0
-var fdk_mechanism_pivot_x: float = 0.0
-var fdk_mechanism_pivot_y: float = 0.0
-var fdk_mechanism_rotation: float = 0.0
+var fdk_sprite_scale: float = 0.84
+var fdk_sprite_offset_x: float = -17.0
+var fdk_sprite_offset_y: float = -62.0
+var fdk_col_offset_x: float = 12.0
+var fdk_col_offset_y: float = 26.0
+var fdk_col_width: float = 254.0
+var fdk_col_height: float = 174.0
+var fdk_col_scale: float = 1.28
+var fdk_mechanism_pos_x: float = 262.0
+var fdk_mechanism_pos_y: float = -516.0
+var fdk_mechanism_scale: float = 0.5
+var fdk_mechanism_pivot_x: float = 400.0
+var fdk_mechanism_pivot_y: float = -524.0
+var fdk_mechanism_rotation: float = -51.0
 # 滚动铁球（FatDemonKing Attack1 放出的会滚动的铁球）的可调参数：
 # - fdk_ball_scale       铁球美术资源缩放（视觉大小）
 # - fdk_ball_track_offset_y 铁球在三层平台上滚动时的美术 Y 偏移（修正铁球陷进/浮在平台的视觉）
 # - fdk_ball_spin_speed  铁球视觉自转速度系数（仅影响贴图旋转快慢，不影响位移）
 # - fdk_ball_roll_speed  铁球沿轨道的水平滚动移动速度（像素/秒）
 # - fdk_ball_rest_offset_x/y 平行(静止)状态下铁球相对机关平台的初始位置 XY 偏移
-var fdk_ball_scale: float = 0.55
-var fdk_ball_rest_offset_x: float = 0.0
-var fdk_ball_rest_offset_y: float = 0.0
-var fdk_ball_track_offset_y: float = 0.0
-var fdk_ball_spin_speed: float = 1.0
+var fdk_ball_scale: float = 1.0
+var fdk_ball_rest_offset_x: float = 144.0
+var fdk_ball_rest_offset_y: float = -87.0
+var fdk_ball_track_offset_y: float = -72.0
+var fdk_ball_spin_speed: float = 0.55
 var fdk_ball_roll_speed: float = 260.0
 # 炮弹（FatDemonKing Attack2 落下的炮弹）落在平台上消失/爆炸的高度微调与爆炸大小：
 # - shell_firecracker_scale  爆竹本体美术资源缩放
 # - shell_explode_offset_y     炮弹在平台站立面 Y 基础上的额外偏移（负值=更高处提前消失爆炸，正值=更靠下）；影响爆炸触发判定高度
 # - shell_explode_scale        Explode 爆炸序列帧美术资源的视觉缩放
 # - shell_explode_art_offset_y 爆炸美术序列帧相对炮弹爆炸位置的额外 Y 偏移（仅影响美术显示，不改变爆炸触发判定；负值=美术更高，正值=更低）
-var shell_firecracker_scale: float = 0.6
-var shell_explode_offset_y: float = 0.0
-var shell_explode_scale: float = 0.6
-var shell_explode_art_offset_y: float = 0.0
+var shell_firecracker_scale: float = 1.06
+var shell_explode_offset_y: float = -44.0
+var shell_explode_scale: float = 1.27
+var shell_explode_art_offset_y: float = -94.0
 # Boss（ChapterBoss 关卡的关底大怪）：当前只接入 sprite 缩放 + 位置偏移，
 # 没有碰撞调参（Boss 不参与玩家碰撞/吸入流程，加碰撞之后再补 col_* 字段）。
 # 默认 scale 0.4 是个先验估值；策划用 F1 调好后这里 baked 成新默认。
@@ -114,9 +119,9 @@ var boss_skull_spawn_offset_y: float = -166.0
 # PNG 原图较大，0.18 是策划先验估值；F1 面板可实时调整。
 var boss_skull_scale: float = 0.57
 # Boss Attack3 鬼火：这里的大小与位置是出现缩放动画结束后的 100% 状态。
-var boss_ghost_fire_scale: float = 0.58
+var boss_ghost_fire_scale: float = 0.43
 var boss_ghost_fire_offset_x: float = 0.0
-var boss_ghost_fire_offset_y: float = 24.0
+var boss_ghost_fire_offset_y: float = 8.0
 # 被发射敌人（团状翻滚 ball）的 sprite scale
 var ball_sprite_scale: float = 0.45
 # 地图上掉落元宝（被发射敌人撞击 3-5 个捕获物时掉落）的生成偏移、视觉大小和落地贴地高度。
@@ -126,53 +131,53 @@ var drop_yuanbao_scale: float = 0.40
 var drop_yuanbao_fall_half_height: float = 35.0
 # 主菜单标题图位置与大小（StartPicture_title.png 在 1920×1080 画布上的中心坐标 + 缩放）
 var title_pos_x: float = 340.0
-var title_pos_y: float = 502.0
-var title_scale: float = 1.14
+var title_pos_y: float = 498.0
+var title_scale: float = 1.2
 # 关卡 HUD 钟馗生命值（三颗红心）：Hearts 容器在 HeartCounter 内的位置和红心缩放
-var heart_pos_x: float = 0.0
-var heart_pos_y: float = 0.0
-var heart_scale: float = 1.0
+var heart_pos_x: float = 115.0
+var heart_pos_y: float = 10.0
+var heart_scale: float = 0.94
 # 关卡 HUD 钟馗头像：AvatarFrame.png 在 HUD 根节点下的位置和缩放
-var avatar_frame_pos_x: float = 20.0
-var avatar_frame_pos_y: float = 94.0
-var avatar_frame_scale: float = 0.5
+var avatar_frame_pos_x: float = 26.0
+var avatar_frame_pos_y: float = 11.0
+var avatar_frame_scale: float = 0.37
 # Chapter3 HUD 胖魔王头像与血条。头像位置是左上角，血条位置是矩形左上角。
-var fdk_avatar_frame_pos_x: float = 1772.0
-var fdk_avatar_frame_pos_y: float = 94.0
-var fdk_avatar_frame_scale: float = 0.5
-var fdk_health_bar_pos_x: float = 1668.0
-var fdk_health_bar_pos_y: float = 136.0
-var fdk_health_bar_width: float = 92.0
-var fdk_health_bar_height: float = 24.0
+var fdk_avatar_frame_pos_x: float = 1819.0
+var fdk_avatar_frame_pos_y: float = 11.0
+var fdk_avatar_frame_scale: float = 0.37
+var fdk_health_bar_pos_x: float = 1510.0
+var fdk_health_bar_pos_y: float = 43.0
+var fdk_health_bar_width: float = 274.0
+var fdk_health_bar_height: float = 20.0
 # ChapterBoss HUD Boss 头像与血条。头像位置是左上角，血条位置是矩形左上角。
-var boss_avatar_frame_pos_x: float = 1772.0
-var boss_avatar_frame_pos_y: float = 76.0
-var boss_avatar_frame_scale: float = 0.125
-var boss_health_bar_pos_x: float = 1508.0
-var boss_health_bar_pos_y: float = 128.0
-var boss_health_bar_width: float = 232.0
+var boss_avatar_frame_pos_x: float = 1805.0
+var boss_avatar_frame_pos_y: float = 10.0
+var boss_avatar_frame_scale: float = 0.1
+var boss_health_bar_pos_x: float = 1350.0
+var boss_health_bar_pos_y: float = 46.0
+var boss_health_bar_width: float = 419.0
 var boss_health_bar_height: float = 28.0
 # 关卡 HUD 铜钱/元宝统计：图标与像素数字在各自 Counter 容器内的位置和缩放
-var coin_icon_pos_x: float = 0.0
-var coin_icon_pos_y: float = 2.0
-var coin_icon_scale: float = 0.45
-var coin_digits_pos_x: float = 72.0
-var coin_digits_pos_y: float = 6.0
+var coin_icon_pos_x: float = -341.0
+var coin_icon_pos_y: float = 17.0
+var coin_icon_scale: float = 0.42
+var coin_digits_pos_x: float = -264.0
+var coin_digits_pos_y: float = 18.0
 var coin_digits_scale: float = 1.0
-var yuanbao_icon_pos_x: float = 0.0
-var yuanbao_icon_pos_y: float = 8.0
-var yuanbao_icon_scale: float = 0.45
-var yuanbao_digits_pos_x: float = 98.0
-var yuanbao_digits_pos_y: float = 6.0
+var yuanbao_icon_pos_x: float = -400.0
+var yuanbao_icon_pos_y: float = 21.0
+var yuanbao_icon_scale: float = 0.39
+var yuanbao_digits_pos_x: float = -310.0
+var yuanbao_digits_pos_y: float = 18.0
 var yuanbao_digits_scale: float = 1.0
 # 关卡 HUD 游戏倒计时背景牌：以屏幕坐标作为中心点，缩放基于 Chapter_Countdown.png 原始尺寸。
-var countdown_bg_pos_x: float = 870.0
-var countdown_bg_pos_y: float = 52.0
-var countdown_bg_scale: float = 1.20
+var countdown_bg_pos_x: float = 968.0
+var countdown_bg_pos_y: float = 45.0
+var countdown_bg_scale: float = 1.14
 # 关卡 HUD 游戏倒计时数字：TimeLabel 在 CountdownCounter 容器内的位置和整体 Control 缩放。
-var countdown_digits_pos_x: float = 0.0
-var countdown_digits_pos_y: float = 0.0
-var countdown_digits_scale: float = 1.0
+var countdown_digits_pos_x: float = 397.0
+var countdown_digits_pos_y: float = -16.0
+var countdown_digits_scale: float = 1.02
 # 钟馗"吸入消失点"相对钟馗中心的偏移（朝向跟随钟馗朝向自动镜像 X）
 # 敌人被吸时朝这个点飞，到达 capture 触发瞬间敌人正好在此处消失（视觉上=飞进葫芦）
 var vanish_point_offset_x: float = 78.0
@@ -206,35 +211,76 @@ func load_config() -> void:
 	var fdk_hud_tuning_is_current: bool = (
 		cfg.get_value("meta", "fdk_hud_tuning_version", 0) == FDK_HUD_TUNING_VERSION
 	)
-	var should_save_config: bool = not fdk_hud_tuning_is_current
-	sprite_scale         = cfg.get_value("char", "sprite_scale", sprite_scale)
-	sprite_offset_x      = cfg.get_value("char", "sprite_offset_x", sprite_offset_x)
-	sprite_offset_y      = cfg.get_value("char", "sprite_offset_y", sprite_offset_y)
-	body_width           = cfg.get_value("char", "body_width", body_width)
-	body_height          = cfg.get_value("char", "body_height", body_height)
-	body_offset_y        = cfg.get_value("char", "body_offset_y", body_offset_y)
-	suction_offset_x     = cfg.get_value("char", "suction_offset_x", suction_offset_x)
-	suction_offset_y     = cfg.get_value("char", "suction_offset_y", suction_offset_y)
-	suction_width        = cfg.get_value("char", "suction_width", suction_width)
-	suction_height       = cfg.get_value("char", "suction_height", suction_height)
-	hold_warning_offset_y = cfg.get_value("char", "hold_warning_offset_y", hold_warning_offset_y)
-	inhale_fx_scale      = cfg.get_value("char", "inhale_fx_scale", inhale_fx_scale)
-	inhale_fx_offset_x   = cfg.get_value("char", "inhale_fx_offset_x", inhale_fx_offset_x)
-	inhale_fx_offset_y   = cfg.get_value("char", "inhale_fx_offset_y", inhale_fx_offset_y)
+	# char 段（钟馗本体）与通用 ui 段（红心/头像/铜钱/元宝/倒计时/标题）的版本门控。
+	# 旧 Web 存档没有这两个版本号（默认 0），与当前不符 → 丢弃旧值、用最新 baked 默认重写。
+	var char_tuning_is_current: bool = (
+		cfg.get_value("meta", "char_tuning_version", 0) == CHAR_TUNING_VERSION
+	)
+	var ui_tuning_is_current: bool = (
+		cfg.get_value("meta", "ui_tuning_version", 0) == UI_TUNING_VERSION
+	)
+	var should_save_config: bool = (
+		not fdk_hud_tuning_is_current
+		or not char_tuning_is_current
+		or not ui_tuning_is_current
+	)
+	if char_tuning_is_current:
+		sprite_scale         = cfg.get_value("char", "sprite_scale", sprite_scale)
+		sprite_offset_x      = cfg.get_value("char", "sprite_offset_x", sprite_offset_x)
+		sprite_offset_y      = cfg.get_value("char", "sprite_offset_y", sprite_offset_y)
+		body_width           = cfg.get_value("char", "body_width", body_width)
+		body_height          = cfg.get_value("char", "body_height", body_height)
+		body_offset_y        = cfg.get_value("char", "body_offset_y", body_offset_y)
+		suction_offset_x     = cfg.get_value("char", "suction_offset_x", suction_offset_x)
+		suction_offset_y     = cfg.get_value("char", "suction_offset_y", suction_offset_y)
+		suction_width        = cfg.get_value("char", "suction_width", suction_width)
+		suction_height       = cfg.get_value("char", "suction_height", suction_height)
+		hold_warning_offset_y = cfg.get_value("char", "hold_warning_offset_y", hold_warning_offset_y)
+		inhale_fx_scale      = cfg.get_value("char", "inhale_fx_scale", inhale_fx_scale)
+		inhale_fx_offset_x   = cfg.get_value("char", "inhale_fx_offset_x", inhale_fx_offset_x)
+		inhale_fx_offset_y   = cfg.get_value("char", "inhale_fx_offset_y", inhale_fx_offset_y)
+		vanish_point_offset_x = cfg.get_value("char", "vanish_point_offset_x", vanish_point_offset_x)
+		vanish_point_offset_y = cfg.get_value("char", "vanish_point_offset_y", vanish_point_offset_y)
 	ball_sprite_scale    = cfg.get_value("ball", "ball_sprite_scale", ball_sprite_scale)
 	drop_yuanbao_offset_x = cfg.get_value("pickup", "drop_yuanbao_offset_x", drop_yuanbao_offset_x)
 	drop_yuanbao_offset_y = cfg.get_value("pickup", "drop_yuanbao_offset_y", drop_yuanbao_offset_y)
 	drop_yuanbao_scale    = cfg.get_value("pickup", "drop_yuanbao_scale", drop_yuanbao_scale)
 	drop_yuanbao_fall_half_height = cfg.get_value("pickup", "drop_yuanbao_fall_half_height", drop_yuanbao_fall_half_height)
-	title_pos_x          = cfg.get_value("ui", "title_pos_x", title_pos_x)
-	title_pos_y          = cfg.get_value("ui", "title_pos_y", title_pos_y)
-	title_scale          = cfg.get_value("ui", "title_scale", title_scale)
-	heart_pos_x          = cfg.get_value("ui", "heart_pos_x", heart_pos_x)
-	heart_pos_y          = cfg.get_value("ui", "heart_pos_y", heart_pos_y)
-	heart_scale          = cfg.get_value("ui", "heart_scale", heart_scale)
-	avatar_frame_pos_x   = cfg.get_value("ui", "avatar_frame_pos_x", avatar_frame_pos_x)
-	avatar_frame_pos_y   = cfg.get_value("ui", "avatar_frame_pos_y", avatar_frame_pos_y)
-	avatar_frame_scale   = cfg.get_value("ui", "avatar_frame_scale", avatar_frame_scale)
+	if ui_tuning_is_current:
+		title_pos_x          = cfg.get_value("ui", "title_pos_x", title_pos_x)
+		title_pos_y          = cfg.get_value("ui", "title_pos_y", title_pos_y)
+		title_scale          = cfg.get_value("ui", "title_scale", title_scale)
+		heart_pos_x          = cfg.get_value("ui", "heart_pos_x", heart_pos_x)
+		heart_pos_y          = cfg.get_value("ui", "heart_pos_y", heart_pos_y)
+		heart_scale          = cfg.get_value("ui", "heart_scale", heart_scale)
+		avatar_frame_pos_x   = cfg.get_value("ui", "avatar_frame_pos_x", avatar_frame_pos_x)
+		avatar_frame_pos_y   = cfg.get_value("ui", "avatar_frame_pos_y", avatar_frame_pos_y)
+		avatar_frame_scale   = cfg.get_value("ui", "avatar_frame_scale", avatar_frame_scale)
+		boss_avatar_frame_pos_x = cfg.get_value("ui", "boss_avatar_frame_pos_x", boss_avatar_frame_pos_x)
+		boss_avatar_frame_pos_y = cfg.get_value("ui", "boss_avatar_frame_pos_y", boss_avatar_frame_pos_y)
+		boss_avatar_frame_scale = cfg.get_value("ui", "boss_avatar_frame_scale", boss_avatar_frame_scale)
+		boss_health_bar_pos_x   = cfg.get_value("ui", "boss_health_bar_pos_x", boss_health_bar_pos_x)
+		boss_health_bar_pos_y   = cfg.get_value("ui", "boss_health_bar_pos_y", boss_health_bar_pos_y)
+		boss_health_bar_width   = cfg.get_value("ui", "boss_health_bar_width", boss_health_bar_width)
+		boss_health_bar_height  = cfg.get_value("ui", "boss_health_bar_height", boss_health_bar_height)
+		coin_icon_pos_x      = cfg.get_value("ui", "coin_icon_pos_x", coin_icon_pos_x)
+		coin_icon_pos_y      = cfg.get_value("ui", "coin_icon_pos_y", coin_icon_pos_y)
+		coin_icon_scale      = cfg.get_value("ui", "coin_icon_scale", coin_icon_scale)
+		coin_digits_pos_x    = cfg.get_value("ui", "coin_digits_pos_x", coin_digits_pos_x)
+		coin_digits_pos_y    = cfg.get_value("ui", "coin_digits_pos_y", coin_digits_pos_y)
+		coin_digits_scale    = cfg.get_value("ui", "coin_digits_scale", coin_digits_scale)
+		yuanbao_icon_pos_x   = cfg.get_value("ui", "yuanbao_icon_pos_x", yuanbao_icon_pos_x)
+		yuanbao_icon_pos_y   = cfg.get_value("ui", "yuanbao_icon_pos_y", yuanbao_icon_pos_y)
+		yuanbao_icon_scale   = cfg.get_value("ui", "yuanbao_icon_scale", yuanbao_icon_scale)
+		yuanbao_digits_pos_x = cfg.get_value("ui", "yuanbao_digits_pos_x", yuanbao_digits_pos_x)
+		yuanbao_digits_pos_y = cfg.get_value("ui", "yuanbao_digits_pos_y", yuanbao_digits_pos_y)
+		yuanbao_digits_scale = cfg.get_value("ui", "yuanbao_digits_scale", yuanbao_digits_scale)
+		countdown_bg_pos_x   = cfg.get_value("ui", "countdown_bg_pos_x", countdown_bg_pos_x)
+		countdown_bg_pos_y   = cfg.get_value("ui", "countdown_bg_pos_y", countdown_bg_pos_y)
+		countdown_bg_scale   = cfg.get_value("ui", "countdown_bg_scale", countdown_bg_scale)
+		countdown_digits_pos_x = cfg.get_value("ui", "countdown_digits_pos_x", countdown_digits_pos_x)
+		countdown_digits_pos_y = cfg.get_value("ui", "countdown_digits_pos_y", countdown_digits_pos_y)
+		countdown_digits_scale = cfg.get_value("ui", "countdown_digits_scale", countdown_digits_scale)
 	if fdk_hud_tuning_is_current:
 		fdk_avatar_frame_pos_x = cfg.get_value("ui", "fdk_avatar_frame_pos_x", fdk_avatar_frame_pos_x)
 		fdk_avatar_frame_pos_y = cfg.get_value("ui", "fdk_avatar_frame_pos_y", fdk_avatar_frame_pos_y)
@@ -243,33 +289,6 @@ func load_config() -> void:
 		fdk_health_bar_pos_y   = cfg.get_value("ui", "fdk_health_bar_pos_y", fdk_health_bar_pos_y)
 		fdk_health_bar_width   = cfg.get_value("ui", "fdk_health_bar_width", fdk_health_bar_width)
 		fdk_health_bar_height  = cfg.get_value("ui", "fdk_health_bar_height", fdk_health_bar_height)
-	boss_avatar_frame_pos_x = cfg.get_value("ui", "boss_avatar_frame_pos_x", boss_avatar_frame_pos_x)
-	boss_avatar_frame_pos_y = cfg.get_value("ui", "boss_avatar_frame_pos_y", boss_avatar_frame_pos_y)
-	boss_avatar_frame_scale = cfg.get_value("ui", "boss_avatar_frame_scale", boss_avatar_frame_scale)
-	boss_health_bar_pos_x   = cfg.get_value("ui", "boss_health_bar_pos_x", boss_health_bar_pos_x)
-	boss_health_bar_pos_y   = cfg.get_value("ui", "boss_health_bar_pos_y", boss_health_bar_pos_y)
-	boss_health_bar_width   = cfg.get_value("ui", "boss_health_bar_width", boss_health_bar_width)
-	boss_health_bar_height  = cfg.get_value("ui", "boss_health_bar_height", boss_health_bar_height)
-	coin_icon_pos_x      = cfg.get_value("ui", "coin_icon_pos_x", coin_icon_pos_x)
-	coin_icon_pos_y      = cfg.get_value("ui", "coin_icon_pos_y", coin_icon_pos_y)
-	coin_icon_scale      = cfg.get_value("ui", "coin_icon_scale", coin_icon_scale)
-	coin_digits_pos_x    = cfg.get_value("ui", "coin_digits_pos_x", coin_digits_pos_x)
-	coin_digits_pos_y    = cfg.get_value("ui", "coin_digits_pos_y", coin_digits_pos_y)
-	coin_digits_scale    = cfg.get_value("ui", "coin_digits_scale", coin_digits_scale)
-	yuanbao_icon_pos_x   = cfg.get_value("ui", "yuanbao_icon_pos_x", yuanbao_icon_pos_x)
-	yuanbao_icon_pos_y   = cfg.get_value("ui", "yuanbao_icon_pos_y", yuanbao_icon_pos_y)
-	yuanbao_icon_scale   = cfg.get_value("ui", "yuanbao_icon_scale", yuanbao_icon_scale)
-	yuanbao_digits_pos_x = cfg.get_value("ui", "yuanbao_digits_pos_x", yuanbao_digits_pos_x)
-	yuanbao_digits_pos_y = cfg.get_value("ui", "yuanbao_digits_pos_y", yuanbao_digits_pos_y)
-	yuanbao_digits_scale = cfg.get_value("ui", "yuanbao_digits_scale", yuanbao_digits_scale)
-	countdown_bg_pos_x   = cfg.get_value("ui", "countdown_bg_pos_x", countdown_bg_pos_x)
-	countdown_bg_pos_y   = cfg.get_value("ui", "countdown_bg_pos_y", countdown_bg_pos_y)
-	countdown_bg_scale   = cfg.get_value("ui", "countdown_bg_scale", countdown_bg_scale)
-	countdown_digits_pos_x = cfg.get_value("ui", "countdown_digits_pos_x", countdown_digits_pos_x)
-	countdown_digits_pos_y = cfg.get_value("ui", "countdown_digits_pos_y", countdown_digits_pos_y)
-	countdown_digits_scale = cfg.get_value("ui", "countdown_digits_scale", countdown_digits_scale)
-	vanish_point_offset_x = cfg.get_value("char", "vanish_point_offset_x", vanish_point_offset_x)
-	vanish_point_offset_y = cfg.get_value("char", "vanish_point_offset_y", vanish_point_offset_y)
 	if enemy_tuning_is_current:
 		mh_sprite_scale      = cfg.get_value("enemy", "mh_sprite_scale", mh_sprite_scale)
 		mh_sprite_offset_x   = cfg.get_value("enemy", "mh_sprite_offset_x", mh_sprite_offset_x)
@@ -351,6 +370,8 @@ func save_config() -> void:
 	cfg.set_value("meta", "enemy_tuning_version", ENEMY_TUNING_VERSION)
 	cfg.set_value("meta", "fdk_mechanism_tuning_version", FDK_MECHANISM_TUNING_VERSION)
 	cfg.set_value("meta", "fdk_hud_tuning_version", FDK_HUD_TUNING_VERSION)
+	cfg.set_value("meta", "char_tuning_version", CHAR_TUNING_VERSION)
+	cfg.set_value("meta", "ui_tuning_version", UI_TUNING_VERSION)
 	cfg.set_value("char", "sprite_scale", sprite_scale)
 	cfg.set_value("char", "sprite_offset_x", sprite_offset_x)
 	cfg.set_value("char", "sprite_offset_y", sprite_offset_y)
