@@ -1,6 +1,8 @@
 extends CharacterBody2D
 class_name Enemy
 
+const PICKUP_SCENE = preload("res://scenes/pickup.tscn")
+
 enum Type { METEOR_HAMMER, RED_GHOST, RED_DEVIL, PALACE_ZOMBIE, FAT_DEMON_KING }
 
 @export var enemy_type: Type = Type.METEOR_HAMMER
@@ -911,6 +913,10 @@ var _has_suction_start: bool = false
 var _suction_vanish_world: Vector2 = Vector2.ZERO
 var _has_suction_vanish: bool = false
 var _has_suction_visual_origin: bool = false
+var _pending_ball_reward_armed: bool = false
+var _pending_ball_reward_type: int = -1
+var _pending_ball_reward_pos: Vector2 = Vector2.ZERO
+var _pending_ball_reward_parent: Node = null
 
 const SUCTION_FLIGHT_STRETCH_MAX := 0.70
 const SUCTION_FLIGHT_SQUASH_MAX := 0.30
@@ -2397,11 +2403,37 @@ func take_damage(amount: int = 1) -> void:
 	if health <= 0:
 		die()
 
+func arm_ball_reward(hit_position: Vector2, pickup_type: int, drop_parent: Node) -> void:
+	_pending_ball_reward_armed = true
+	_pending_ball_reward_type = pickup_type
+	_pending_ball_reward_pos = hit_position
+	_pending_ball_reward_parent = drop_parent
+
+func _drop_pending_ball_reward() -> void:
+	if not _pending_ball_reward_armed:
+		return
+	_pending_ball_reward_armed = false
+	var parent: Node = _pending_ball_reward_parent if (_pending_ball_reward_parent != null and is_instance_valid(_pending_ball_reward_parent) and _pending_ball_reward_parent.is_inside_tree()) else null
+	if parent == null:
+		var loop := Engine.get_main_loop()
+		if loop is SceneTree:
+			parent = (loop as SceneTree).current_scene
+	if parent == null:
+		return
+	var reward = PICKUP_SCENE.instantiate()
+	reward.pickup_type = _pending_ball_reward_type
+	parent.add_child(reward)
+	if _pending_ball_reward_type == Pickup.Type.STAR:
+		reward.global_position = _pending_ball_reward_pos + Vector2(CharTuning.drop_yuanbao_offset_x, CharTuning.drop_yuanbao_offset_y)
+	else:
+		reward.global_position = _pending_ball_reward_pos
+
 func die() -> void:
 	if dying:
 		return
 	dying = true
 	is_captured = true
+	_drop_pending_ball_reward()
 	if enemy_type == Type.FAT_DEMON_KING:
 		_notify_fat_demon_king_hud_hide()
 	# 保险：DASH VANISH 阶段中死亡 → 强制显示 sprite，避免死亡动画隐形播放

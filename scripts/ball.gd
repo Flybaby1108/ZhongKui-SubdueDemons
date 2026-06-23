@@ -178,15 +178,14 @@ func _on_hit_area(area: Area2D) -> void:
 static func _resolve_enemy_hit_static(enemy: Enemy, hit_position: Vector2, pickup_type: int, drop_parent: Node) -> void:
 	if not is_instance_valid(enemy) or enemy.dying:
 		return
+	if enemy.has_method("arm_ball_reward"):
+		enemy.arm_ball_reward(hit_position, pickup_type, drop_parent)
 	if enemy.enemy_type == Enemy.Type.FAT_DEMON_KING:
 		_play_enemy_hit_sfx_static(drop_parent)
 		enemy.take_damage(1)
-		if enemy.dying:
-			_drop_reward_static(hit_position, pickup_type, drop_parent)
 		return
 	# 每个被滚动 ball 撞死的敌人按本次吸入数量爆 1 个奖励：
 	# 1-2 只掉铜钱，3-5 只掉元宝。
-	_drop_reward_static(hit_position, pickup_type, drop_parent)
 	_play_enemy_hit_sfx_static(drop_parent)
 	enemy.die()
 
