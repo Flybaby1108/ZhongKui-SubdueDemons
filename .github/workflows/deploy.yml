@@ -77,6 +77,45 @@ jobs:
           godot --headless --path . --export-release "${EXPORT_NAME}" "${EXPORT_DIR}/index.html"
           ls -la "${EXPORT_DIR}"
 
+      - name: Cache-bust web assets (version by commit SHA)
+        # 背景：Godot 的 web 导出用固定文件名（index.pck / index.wasm / index.js ...）。
+        # GitHub Pages + 浏览器会长期缓存这些静态资源，导致老玩家即使我们重新部署了
+        # 修复版，浏览器仍加载缓存里的旧 index.pck，运行旧代码（典型表现：鬼球击杀
+        # 敌人不掉落铜钱/元宝等已修复的 Bug 在线上"复活"）。
+        #
+        # 解决：给所有 index.* 资源文件名追加本次提交的短 SHA，使每次部署的资源 URL
+        # 都唯一变化，强制所有浏览器拉取全新资源，彻底绕过旧缓存。index.html 本身不
+        # 改名（GitHub Pages 对 html 用协商缓存，会及时拿到最新版），仅在其中同步改写
+        # 对 index.js / executable 基名 / fileSizes 键名的引用。
+        run: |
+          set -e
+          VER="${GITHUB_SHA::8}"
+          cd "${EXPORT_DIR}"
+
+          # 1) 重命名除 index.html 外的所有 index.* 资源：index.<rest> -> index-<VER>.<rest>
+          for f in index.*; do
+            [ "$f" = "index.html" ] && continue
+            rest="${f#index.}"
+            mv "$f" "index-${VER}.${rest}"
+          done
+
+          # 2) 改写 index.html 中对资源的所有引用，使其指向重命名后的带版本文件：
+          #    - 资源引用形如 href="index.icon.png" / src="index.js" / src="index.png"
+          #      / "index.pck" / "index.wasm"，统一把 `index.<rest>` 改成 `index-<VER>.<rest>`
+          #    - GODOT_CONFIG 的 "executable":"index" 改成 "index-<VER>"，loader 据此在运行时
+          #      拼接 .pck/.wasm/.audio.worklet.js 等资源 URL
+          # 注意：index.html 自身不会在文件内自引用，故不会被误伤。
+          sed -i \
+            -e "s#\(href=\"\)index\.#\1index-${VER}.#g" \
+            -e "s#\(src=\"\)index\.#\1index-${VER}.#g" \
+            -e "s#\"executable\":\"index\"#\"executable\":\"index-${VER}\"#g" \
+            -e "s#\"index\.pck\"#\"index-${VER}.pck\"#g" \
+            -e "s#\"index\.wasm\"#\"index-${VER}.wasm\"#g" \
+            index.html
+
+          echo "=== cache-busted to version ${VER} ==="
+          ls -la
+
       - name: Add .nojekyll
         # Prevents GitHub Pages' Jekyll from filtering out files starting with `_`
         # (Godot's web build doesn't ship any, but this is defensive + standard practice)

@@ -1,8 +1,6 @@
 extends CharacterBody2D
 class_name Enemy
 
-const PICKUP_SCENE = preload("res://scenes/pickup.tscn")
-
 enum Type { METEOR_HAMMER, RED_GHOST, RED_DEVIL, PALACE_ZOMBIE, FAT_DEMON_KING }
 
 @export var enemy_type: Type = Type.METEOR_HAMMER
@@ -2420,7 +2418,11 @@ func _drop_pending_ball_reward() -> void:
 			parent = (loop as SceneTree).current_scene
 	if parent == null:
 		return
-	var reward = PICKUP_SCENE.instantiate()
+	var pickup_scene := load("res://scenes/pickup.tscn") as PackedScene
+	if pickup_scene == null:
+		push_error("Failed to load pickup scene for enemy reward drop.")
+		return
+	var reward = pickup_scene.instantiate()
 	reward.pickup_type = _pending_ball_reward_type
 	parent.add_child(reward)
 	if _pending_ball_reward_type == Pickup.Type.STAR:

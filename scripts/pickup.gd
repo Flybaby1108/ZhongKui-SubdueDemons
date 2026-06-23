@@ -192,7 +192,8 @@ func _tick_fall(delta: float) -> void:
 		_landed = true
 
 func _on_body_entered(body: Node) -> void:
-	if _collected or not (body is Player):
+	var is_player := body != null and body.is_in_group("player")
+	if _collected or not is_player:
 		return
 	_collected = true
 	set_deferred("monitoring", false)

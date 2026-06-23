@@ -19,7 +19,6 @@ const LAUNCHED_TEX := {
 }
 
 const COLLISION_SFX_PATH := "res://assets/audio/Zhongkui_Inhale_Collision.mp3"
-const PICKUP_SCENE = preload("res://scenes/pickup.tscn")
 const ACTIVE_BALL_GROUP := "active_ghost_balls"
 
 # FireSkull 喷出后的帧动画序列（FireSkull 在 ball 形态下继续循环播放原序列帧）。
@@ -199,7 +198,11 @@ static func _drop_reward_static(at: Vector2, pickup_type: int, drop_parent: Node
 			parent = (loop as SceneTree).current_scene
 	if parent == null:
 		return
-	var reward = PICKUP_SCENE.instantiate()
+	var pickup_scene := load("res://scenes/pickup.tscn") as PackedScene
+	if pickup_scene == null:
+		push_error("Failed to load pickup scene for ball reward drop.")
+		return
+	var reward = pickup_scene.instantiate()
 	reward.pickup_type = pickup_type
 	parent.add_child(reward)
 	# 在敌人位置生成奖励；道具自身有重力 + 地面探测，会自动落到正下方最近的平台/地面上

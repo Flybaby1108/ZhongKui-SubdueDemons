@@ -529,7 +529,10 @@ func _capture_enemy(enemy: Node) -> void:
 func _shoot_balls() -> void:
 	if captured_enemies.is_empty():
 		return
-	var ball_scene = preload("res://scenes/ball.tscn")
+	var ball_scene := load("res://scenes/ball.tscn") as PackedScene
+	if ball_scene == null:
+		push_error("Failed to load ball scene for player shot.")
+		return
 	var dir_x: int = 1 if facing_right else -1
 	var capture_count: int = captured_enemies.size()
 	for i in range(captured_enemies.size()):
