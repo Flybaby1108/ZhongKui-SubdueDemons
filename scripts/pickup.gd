@@ -118,6 +118,10 @@ func _ready() -> void:
 	CharTuning.tuning_changed.connect(_apply_tuning)
 	body_entered.connect(_on_body_entered)
 
+func _exit_tree() -> void:
+	if CharTuning.tuning_changed.is_connected(_apply_tuning):
+		CharTuning.tuning_changed.disconnect(_apply_tuning)
+
 func _apply_tuning() -> void:
 	var s: float = SPRITE_SCALE.get(pickup_type, 1.0)
 	if pickup_type == Type.STAR:

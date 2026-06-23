@@ -173,6 +173,46 @@ var _skill_t: float = 0.0
 # 同时确保三招都会出现，不会像之前那样长时间锁死在某一招上）。
 var _next_attack: int = 0
 
+# 预加载缓存：保存上一关预取回的 Boss 资源引用，使 _ready() 里的 load() 直接命中
+# ResourceLoader 缓存而即时返回，消除切到 Boss 关那一帧的同步加载卡顿。
+# _ready() 读取完后由 clear_preload_cache() 释放，避免长期占用内存。
+static var _preload_cache: Dictionary = {}
+
+# 返回 Boss 在 _ready() 里会同步 load() 的全部资源路径（序列帧 + 召唤敌人场景 +
+# 投射物场景）。供上一关在通关动画期间提前线程预加载。
+static func get_preload_resource_paths() -> Array[String]:
+	var paths: Array[String] = []
+	# 召唤敌人场景 + 投射物场景
+	paths.append("res://scenes/enemy_meteor_hammer.tscn")
+	paths.append("res://scenes/enemy_red_ghost.tscn")
+	paths.append("res://scenes/enemy_red_devil.tscn")
+	paths.append("res://scenes/enemy_palace_zombie.tscn")
+	paths.append("res://scenes/fire_skull.tscn")
+	paths.append("res://scenes/boss_ghost_fire.tscn")
+	# idle 帧
+	for path in IDLE_FRAMES:
+		paths.append(path)
+	# attack1 / attack2 / attack3 / die 帧
+	for i in range(1, ATTACK1_FRAME_COUNT + 1):
+		paths.append(ATTACK1_FRAME_PATH_FMT % i)
+	for i in range(1, ATTACK2_FRAME_COUNT + 1):
+		paths.append(ATTACK2_FRAME_PATH_FMT % i)
+	for i in range(1, ATTACK3_FRAME_COUNT + 1):
+		paths.append(ATTACK3_FRAME_PATH_FMT % i)
+	for i in range(1, DIE_FRAME_COUNT + 1):
+		paths.append(DIE_FRAME_PATH_FMT % i)
+	return paths
+
+# 由上一关在切场景前调用：登记一个已取回的预加载资源，持有引用直到 Boss _ready
+# 读取。资源同时已进入 ResourceLoader 缓存，故 _ready 里的 load() 会即时命中。
+static func register_preloaded(path: String, res: Resource) -> void:
+	if res != null:
+		_preload_cache[path] = res
+
+# Boss _ready 读取完毕后释放预加载缓存引用（资源仍由 Boss 自身的帧数组持有）。
+static func clear_preload_cache() -> void:
+	_preload_cache.clear()
+
 func _ready() -> void:
 	add_to_group("boss")
 	print("[BOSS DEBUG] _ready: layer=", collision_layer, " mask=", collision_mask, " global_position=", global_position)
@@ -228,6 +268,10 @@ func _ready() -> void:
 			push_warning("[Boss] Die 第 %d 帧加载失败：%s（资源未导入？）" % [i, die_path])
 			continue
 		_die_frames.append(die_tex)
+
+	# 帧/场景已全部被本节点的数组持有，释放上一关的预加载缓存引用（资源仍在
+	# ResourceLoader 缓存与这些数组中，不会被回收）。
+	clear_preload_cache()
 
 	anim_timer.wait_time = IDLE_FRAME_INTERVAL
 	anim_timer.timeout.connect(_on_anim_tick)
@@ -570,9 +614,15 @@ func _schedule_ghost_fire_expand(row: Dictionary, radius: int) -> void:
 	var delay := GHOST_FIRE_EXPAND_DELAY * float(radius)
 	# 用挂在 boss 节点上的 Timer（GameState.wait），随 boss 释放，避免退出时
 	# SceneTreeTimer 泄漏。
-	GameState.wait(self, delay).connect(func():
-		_expand_ghost_fire_row(row, radius)
-	)
+	#
+	# 关键：用方法引用 + bind 代替匿名 lambda。
+	# 原因：lambda 会隐式 capture `self`（因为方法调用绑定了 self），当 boss 被
+	# queue_free 后，挂在 timer.timeout 上的 lambda 仍可能被触发（GameState.wait
+	# 在 owner.tree_exiting 时主动 emit timeout 以唤醒等待者），此时 capture[0]
+	# 已被释放，引擎报 "Lambda capture at index 0 was freed. Passed 'null' instead."。
+	# Callable(self, "_expand_ghost_fire_row").bind(row, radius) 直接持有
+	# ObjectID，self 失效时 Callable.call() 被引擎安全跳过，不会触发该报错。
+	GameState.wait(self, delay).connect(_expand_ghost_fire_row.bind(row, radius))
 
 func _expand_ghost_fire_row(row: Dictionary, radius: int) -> void:
 	if dying:

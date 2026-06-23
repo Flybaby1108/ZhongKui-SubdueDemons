@@ -77,6 +77,11 @@ var initial_y: float = 0.0
 # 默认 0（普通敌人不需要）；level.spawn_summoned_enemy() 会显式置为 SUMMON_INVULN_TIME。
 const SUMMON_INVULN_TIME := 0.4
 var summon_invuln_t: float = 0.0
+# Boss 召唤的小怪 spawn 后短暂"无伤期"：出现后头 1 秒内不会对钟馗造成接触伤害。
+# 让玩家有反应/躲避空间，避免敌人凭空出现就贴脸扣血。
+# 默认 0（普通敌人立即可造成伤害）；level.spawn_summoned_enemy() 会显式置为 SUMMON_CONTACT_DAMAGE_DELAY。
+const SUMMON_CONTACT_DAMAGE_DELAY := 1.0
+var contact_damage_delay_t: float = 0.0
 var bat_oscillation_t: float = 0.0
 var player_ref: Node2D = null
 
@@ -916,6 +921,9 @@ func _physics_process(delta: float) -> void:
 	# 召唤豁免期倒数：让 spawn 后头几帧不被 ball.die() 抹掉
 	if summon_invuln_t > 0.0:
 		summon_invuln_t = max(0.0, summon_invuln_t - delta)
+	# 召唤无伤期倒数：spawn 后头 1 秒内不对钟馗造成接触伤害
+	if contact_damage_delay_t > 0.0:
+		contact_damage_delay_t = max(0.0, contact_damage_delay_t - delta)
 	# 上一帧被吸缩小过，本帧却没继续被吸 → 恢复正常尺寸
 	if _was_being_shrunk and not is_being_shrunk:
 		reset_suction_shrink()
@@ -1442,6 +1450,9 @@ func _on_mh_hammer_hit_player(body: Node) -> void:
 	if not (body is Player):
 		return
 	if body.invincible or body.is_vacuuming:
+		return
+	# 召唤出现后头 1 秒内不造成接触伤害
+	if contact_damage_delay_t > 0.0:
 		return
 	body.invincible = true
 	body.invincible_timer = body.HURT_INVINCIBLE_TIME
@@ -2414,6 +2425,10 @@ func die() -> void:
 	anim_timer.stop()
 	var die_tex = TEX[enemy_type]["die"]
 	for i in range(die_tex.size()):
+		# 节点已离开场景树（切场景 / 退出）：立即停止播放死亡帧，避免协程在
+		# GameState.wait 上重新挂起，导致其 GDScript 函数状态（RefCounted）在退出时残留。
+		if not is_inside_tree():
+			return
 		_apply_normal_texture(_cached_load(die_tex[i]), "die")
 		await GameState.wait(self, 0.1)
 	call_deferred("queue_free")

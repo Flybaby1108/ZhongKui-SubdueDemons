@@ -65,6 +65,10 @@ func _ready() -> void:
 	CharTuning.tuning_changed.connect(_apply_tuning)
 	print("[BALL DEBUG] _ready: hit_area.collision_mask=", hit_area.collision_mask, " hit_area.monitoring=", hit_area.monitoring, " hit_area shape valid=", hit_area.get_node("HitShape").shape != null)
 
+func _exit_tree() -> void:
+	if CharTuning.tuning_changed.is_connected(_apply_tuning):
+		CharTuning.tuning_changed.disconnect(_apply_tuning)
+
 func _setup_collision_sfx() -> void:
 	collision_sfx = AudioStreamPlayer.new()
 	collision_sfx.name = "CollisionSfx"

@@ -50,7 +50,14 @@ func _input(event: InputEvent) -> void:
 		GameState.goto_main_menu()
 
 func _exit_tree() -> void:
+	# 退出（含进程关闭）时若播放器仍在播放，其 AudioStreamPlaybackMP3 会在 AudioServer
+	# 关闭前继续引用 GameOver.mp3 / EndEffect.mp3，触发
+	# "ObjectDB instances leaked at exit" / "resources still in use at exit"。
+	# 退出路径下 SceneTree 已不再 tick，queue_free 的延迟队列不会被 flush，因此用
+	# free() 立即释放，并先解除 stream 引用让资源引用计数归零。退出竞争由 GameState
+	# 统一的关窗清理（_handle_close_request 的逐帧 await）兜底刷新音频线程。
 	if is_instance_valid(_end_effect_player):
 		_end_effect_player.stop()
-		_end_effect_player.queue_free()
+		_end_effect_player.stream = null
+		_end_effect_player.free()
 	_end_effect_player = null

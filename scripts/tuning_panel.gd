@@ -17,6 +17,9 @@ func _ready() -> void:
 	add_to_group("tuning_panel")
 	_build_ui()
 
+func _exit_tree() -> void:
+	_disconnect_rows()
+
 func _input(event: InputEvent) -> void:
 	if event is InputEventKey and event.pressed and not event.echo:
 		if event.keycode == KEY_F1:
@@ -443,43 +446,116 @@ func _add_row(label_text: String, prop: String, min_v: float, max_v: float, step
 	value_edit.visible = false
 	value_holder.add_child(value_edit)
 
-	# 把 LineEdit 中的字符串解析成数值并写回 slider/CharTuning（同时触发 slider.value_changed 回调）
-	var commit_edit := func() -> void:
-		var raw := value_edit.text.strip_edges()
-		if raw.is_valid_float():
-			var v: float = clamp(raw.to_float(), min_v, max_v)
-			slider.value = v   # 触发 value_changed → 写 CharTuning + 更新 value_label
-		value_edit.visible = false
-		value_label.visible = true
-		value_label.text = _format_value(slider.value)
+	var row_index := _rows.size()
+	var holder_gui_input_cb := _on_row_value_holder_gui_input.bind(row_index)
+	var text_submitted_cb := _on_row_text_submitted.bind(row_index)
+	var focus_exited_cb := _on_row_focus_exited.bind(row_index)
+	var value_changed_cb := _on_row_slider_value_changed.bind(row_index)
+	var row := {
+		"prop": prop,
+		"value_holder": value_holder,
+		"slider": slider,
+		"value_label": value_label,
+		"value_edit": value_edit,
+		"min_v": min_v,
+		"max_v": max_v,
+		"holder_gui_input_cb": holder_gui_input_cb,
+		"text_submitted_cb": text_submitted_cb,
+		"focus_exited_cb": focus_exited_cb,
+		"value_changed_cb": value_changed_cb,
+	}
 
 	# 鼠标点击 holder 任意位置 → 进入编辑态（不要求精确点 Label 文字）
-	value_holder.gui_input.connect(func(event: InputEvent) -> void:
-		if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
-			value_label.visible = false
-			value_edit.visible = true
-			value_edit.text = _format_value(slider.value)
-			value_edit.select_all()
-			value_edit.grab_focus()
-	)
-	value_edit.text_submitted.connect(func(_t: String) -> void: commit_edit.call())
-	value_edit.focus_exited.connect(func() -> void:
-		if value_edit.visible:
-			commit_edit.call()
-	)
+	value_holder.gui_input.connect(holder_gui_input_cb)
+	value_edit.text_submitted.connect(text_submitted_cb)
+	value_edit.focus_exited.connect(focus_exited_cb)
+	slider.value_changed.connect(value_changed_cb)
 
-	slider.value_changed.connect(func(v: float) -> void:
-		CharTuning.set(prop, v)
-		value_label.text = _format_value(v)
-		CharTuning.notify_changed()
-	)
-
-	_rows.append({"prop": prop, "slider": slider, "value_label": value_label, "value_edit": value_edit})
+	_rows.append(row)
 
 func _format_value(v: float) -> String:
 	if abs(v) < 10.0:
 		return "%.2f" % v
 	return "%.0f" % v
+
+func _on_row_value_holder_gui_input(event: InputEvent, row_index: int) -> void:
+	var row := _get_row(row_index)
+	if not _is_row_valid(row):
+		return
+	var value_label: Label = row["value_label"]
+	var value_edit: LineEdit = row["value_edit"]
+	var slider: HSlider = row["slider"]
+	if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
+		value_label.visible = false
+		value_edit.visible = true
+		value_edit.text = _format_value(slider.value)
+		value_edit.select_all()
+		value_edit.grab_focus()
+
+func _on_row_text_submitted(_text: String, row_index: int) -> void:
+	_commit_row_edit(row_index)
+
+func _on_row_focus_exited(row_index: int) -> void:
+	var row := _get_row(row_index)
+	if _is_row_valid(row) and (row["value_edit"] as LineEdit).visible:
+		_commit_row_edit(row_index)
+
+func _on_row_slider_value_changed(v: float, row_index: int) -> void:
+	var row := _get_row(row_index)
+	if not _is_row_valid(row):
+		return
+	CharTuning.set(row["prop"], v)
+	(row["value_label"] as Label).text = _format_value(v)
+	CharTuning.notify_changed()
+
+func _commit_row_edit(row_index: int) -> void:
+	var row := _get_row(row_index)
+	if not _is_row_valid(row):
+		return
+	var value_edit: LineEdit = row["value_edit"]
+	var value_label: Label = row["value_label"]
+	var slider: HSlider = row["slider"]
+	var raw := value_edit.text.strip_edges()
+	if raw.is_valid_float():
+		var v: float = clamp(raw.to_float(), row["min_v"], row["max_v"])
+		slider.value = v   # 触发 value_changed → 写 CharTuning + 更新 value_label
+	value_edit.visible = false
+	value_label.visible = true
+	value_label.text = _format_value(slider.value)
+
+func _get_row(row_index: int) -> Dictionary:
+	if row_index < 0 or row_index >= _rows.size():
+		return {}
+	return _rows[row_index]
+
+func _is_row_valid(row: Dictionary) -> bool:
+	return not row.is_empty() \
+		and is_instance_valid(row.get("value_holder")) \
+		and is_instance_valid(row.get("slider")) \
+		and is_instance_valid(row.get("value_label")) \
+		and is_instance_valid(row.get("value_edit"))
+
+func _disconnect_rows() -> void:
+	for row in _rows:
+		if row.is_empty():
+			continue
+		var value_holder := row.get("value_holder") as Control
+		var value_edit := row.get("value_edit") as LineEdit
+		var slider := row.get("slider") as HSlider
+		var holder_gui_input_cb: Callable = row["holder_gui_input_cb"]
+		var text_submitted_cb: Callable = row["text_submitted_cb"]
+		var focus_exited_cb: Callable = row["focus_exited_cb"]
+		var value_changed_cb: Callable = row["value_changed_cb"]
+		if is_instance_valid(value_holder) and value_holder.gui_input.is_connected(holder_gui_input_cb):
+			value_holder.gui_input.disconnect(holder_gui_input_cb)
+		if is_instance_valid(value_edit):
+			if value_edit.text_submitted.is_connected(text_submitted_cb):
+				value_edit.text_submitted.disconnect(text_submitted_cb)
+			if value_edit.focus_exited.is_connected(focus_exited_cb):
+				value_edit.focus_exited.disconnect(focus_exited_cb)
+		if is_instance_valid(slider) and slider.value_changed.is_connected(value_changed_cb):
+			slider.value_changed.disconnect(value_changed_cb)
+	_rows.clear()
 
 func _can_start_panel_drag() -> bool:
 	if _panel == null:
@@ -610,6 +686,8 @@ func _reset_defaults() -> void:
 	CharTuning.countdown_digits_pos_y = 0.0
 	CharTuning.countdown_digits_scale = 1.0
 	for row in _rows:
+		if not _is_row_valid(row):
+			continue
 		var slider: HSlider = row["slider"]
 		var value_label: Label = row["value_label"]
 		var value_edit: LineEdit = row["value_edit"]

@@ -101,6 +101,10 @@ func _ready() -> void:
 	CharTuning.tuning_changed.connect(_apply_tuning)
 	_apply_tuning()
 
+func _exit_tree() -> void:
+	if CharTuning.tuning_changed.is_connected(_apply_tuning):
+		CharTuning.tuning_changed.disconnect(_apply_tuning)
+
 # 同步 CharTuning：当前只用 boss_skull_scale 作 sprite 缩放。
 # 注意：此函数不能修改 sprite 的旋转 / flip_h——飞行朝向另由 _physics_process 维护。
 # 飞向葫芦阶段（is_in_flight=true）sprite.scale 由收缩公式驱动，不在此覆盖。

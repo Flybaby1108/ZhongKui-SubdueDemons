@@ -27,6 +27,10 @@ func _ready() -> void:
 	# F1 调参（美术大小 / 滚动 Y 位置 / 转速 / 滚动速度）实时同步到正在滚动的铁球。
 	CharTuning.tuning_changed.connect(_apply_tuning)
 
+func _exit_tree() -> void:
+	if CharTuning.tuning_changed.is_connected(_apply_tuning):
+		CharTuning.tuning_changed.disconnect(_apply_tuning)
+
 # 从 F1 调参（CharTuning 自动加载单例）读取铁球的美术大小 / 自转速度 / 滚动速度 / 平台上滚动 Y 偏移。
 func _apply_tuning() -> void:
 	_ball_scale = maxf(0.01, CharTuning.fdk_ball_scale)

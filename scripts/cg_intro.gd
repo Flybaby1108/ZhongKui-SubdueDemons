@@ -168,6 +168,7 @@ func _process(delta: float) -> void:
 	_cg_anim_t += delta
 	while _cg_anim_t >= CG_FRAME_INTERVAL:
 		_cg_anim_t -= CG_FRAME_INTERVAL
+		var prev_idx := _cg_frame_idx
 		_cg_frame_idx += 1
 
 		if _cg_frame_idx >= _cg_frames.size():
@@ -176,6 +177,14 @@ func _process(delta: float) -> void:
 			return
 
 		cg_layer.texture = _cg_frames[_cg_frame_idx]
+
+		# 关键优化：CG 是单向播放、永不回头的序列。每推进一帧，就把刚刚离开
+		# 显示的上一帧从数组里解除引用（置 null），让这张 1920×1080×4 ≈ 8.3MB
+		# 的纹理在播放过程中被分摊回收。否则 279 帧全部驻留（≈2.3GB 显存），
+		# 切场景时旧场景被一次性销毁，这 279 张大纹理的 GPU 资源同步回收会砸在
+		# 切换的那一帧上，造成肉眼可见的卡顿。逐帧释放后，切场景时几乎无纹理待回收。
+		if prev_idx >= 0 and prev_idx < _cg_frames.size():
+			_cg_frames[prev_idx] = null
 
 		# ── 淡出计算（基于 1-indexed 帧号） ──────────────────────
 		# _cg_frame_idx 是 0-indexed；帧号 = _cg_frame_idx + 1
@@ -227,6 +236,16 @@ func _finish(skipped: bool = false) -> void:
 		elif is_instance_valid(music):
 			# 如果没在播放（极端情况），直接释放；StartMusic 已由 GameState 接续。
 			music.queue_free()
+
+	# 切场景前主动解除本场景持有的 CG 大纹理引用，避免旧场景被销毁时一次性回收
+	# 剩余 CG 帧（正常播完时仅末尾几帧，跳过时可能仍有大量帧驻留）的 GPU 资源，
+	# 把这部分同步回收开销从「切换那一帧」剥离出去，消除切场景卡顿。
+	# BgLayer 仍指向 shared_start_bg_frames 中的帧（main_menu 复用），不在此解除。
+	if is_instance_valid(cg_layer):
+		cg_layer.texture = null
+	for i in range(_cg_frames.size()):
+		_cg_frames[i] = null
+	_cg_frames.clear()
 
 	# 用后台已预加载的 PackedScene 切换（无磁盘读取，零卡顿）
 	var packed: PackedScene = GameState.take_threaded_load(MAIN_MENU_PATH) as PackedScene

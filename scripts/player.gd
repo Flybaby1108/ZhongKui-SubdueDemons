@@ -10,6 +10,8 @@ const SUCK_RANGE := Vector2(240, 120)
 const BALL_SPEED := 1500.0
 const HURT_INVINCIBLE_TIME := 1.5
 const HOLD_TIME_LIMIT := 5.0
+# 头顶倒计时进入危险区（<=2秒）后的闪烁频率（每秒次数）
+const BLINK_SPEED := 4.0
 const MAX_CAPTURED := 5
 const VACUUM_CHARGE_TIME := 1.0
 const INHALE_SFX_PATH := "res://assets/audio/Zhongkui_Inhale.mp3"
@@ -556,7 +558,12 @@ func _tick_hold_timer(delta: float) -> void:
 	hold_warning.visible = true
 	hold_warning.text = "%d" % ceili(remaining)
 	if remaining <= 2.0:
-		hold_warning.modulate = Color(1, 0.2, 0.2, 1)
+		# 进入危险区：剧烈闪烁（高频在红色与亮白之间切换，并震荡透明度）
+		var t := Time.get_ticks_msec() / 1000.0
+		var pulse := sin(t * BLINK_SPEED * TAU) * 0.5 + 0.5  # 0~1
+		var col := Color(1, 0.2, 0.2, 1).lerp(Color(1, 1, 1, 1), pulse)
+		col.a = lerp(0.35, 1.0, pulse)
+		hold_warning.modulate = col
 	else:
 		hold_warning.modulate = Color(1, 0.8, 0.2, 1)
 	if hold_timer >= HOLD_TIME_LIMIT:
@@ -571,6 +578,9 @@ func _explode() -> void:
 	GameState.lives = 0
 	GameState.lives_changed.emit(0)
 	await GameState.wait(self, 0.3)
+	# 等待期间若已离开场景树（切场景 / 退出），不再跳转，避免协程残留与无效操作。
+	if not is_inside_tree():
+		return
 	GameState.goto_game_over()
 
 func _update_carried_enemy_position() -> void:
@@ -661,6 +671,9 @@ func _on_hurt_box_body_entered(body: Node) -> void:
 	if body is Enemy and not body.is_captured:
 		if is_switching_platform:
 			return
+		# Boss 召唤的敌人出现后头 1 秒内不造成接触伤害
+		if "contact_damage_delay_t" in body and body.contact_damage_delay_t > 0.0:
+			return
 		last_damage_frame = current_frame
 		invincible = true
 		invincible_timer = HURT_INVINCIBLE_TIME
@@ -683,6 +696,9 @@ func _damage_from_overlapping_enemy() -> void:
 		return
 	for body in hurt_box.get_overlapping_bodies():
 		if body is Enemy and not body.is_captured:
+			# Boss 召唤的敌人出现后头 1 秒内不造成接触伤害
+			if "contact_damage_delay_t" in body and body.contact_damage_delay_t > 0.0:
+				continue
 			last_damage_frame = current_frame
 			invincible = true
 			invincible_timer = HURT_INVINCIBLE_TIME

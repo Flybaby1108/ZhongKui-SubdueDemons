@@ -51,7 +51,10 @@ func _notification(what: int) -> void:
 	elif what == NOTIFICATION_PREDELETE:
 		_drain_pending_threaded_loads()
 		_clear_shared_textures()
+		_release_scene_textures()
 		_release_start_sequence_music()
+		# 兜底路径无逐帧刷新，统一在收尾再 flush 一次，覆盖场景内 BGM / 音效的 playback。
+		flush_audio_thread()
 
 var _quitting: bool = false
 
@@ -69,17 +72,26 @@ func _handle_close_request() -> void:
 	_release_start_sequence_music()
 	var tree := get_tree()
 	if tree != null:
-		tree.paused = true
-		# 等待数帧让音频线程完成 AudioStreamPlayback 的释放（一帧不足以覆盖一次音频
-		# 混音回调），避免 stream 资源退出竞争。
-		for _i in range(8):
+		# 不要 pause SceneTree：暂停后 AudioStreamPlayer 停止处理，反而可能让音频线程
+		# 跳过对已 stop() playback 的回收，导致 8 帧后仍残留 AudioStreamPlayback。
+		# 这里保持运行态逐帧 await，让主循环持续驱动 AudioServer 混音，把所有已停止的
+		# playback（及其引用的 AudioStream）确定性地回收，彻底消除退出竞争导致的
+		# "ObjectDB instances leaked at exit" / "resources still in use at exit"。
+		for _i in range(16):
 			await tree.process_frame
 		tree.quit()
 
 func _exit_tree() -> void:
+	# 兜底路径：程序化 quit() / --quit-after 等不会发 NOTIFICATION_WM_CLOSE_REQUEST，
+	# 不会走 _handle_close_request 的逐帧刷新。这里在 SceneTree 销毁阶段把所有还在
+	# 播放的音频（开场音乐 + 当前场景内的 BGM / 音效）统一停掉并解除 stream 引用，
+	# 再让音频线程把残留 playback 移除，避免 "ObjectDB instances leaked at exit"。
 	_drain_pending_threaded_loads()
 	_clear_shared_textures()
+	_release_scene_textures()
 	_release_start_sequence_music()
+	# 兜底路径无逐帧刷新，统一在收尾再 flush 一次，覆盖场景内 BGM / 音效的 playback。
+	flush_audio_thread()
 
 # 退出前释放开场序列音乐播放器。cg_intro 正常播完时会把持有 CGv1.mp3 的 Music
 # 节点 reparent 到 SceneTree.root 并登记为 _intro_music_player，若玩家在其播放
@@ -88,16 +100,79 @@ func _exit_tree() -> void:
 func _release_start_sequence_music() -> void:
 	# 退出阶段 SceneTree 已停止处理帧，queue_free() 的延迟释放队列不会再被 flush，
 	# 因此这里必须用 free() 立即释放，并先解除 stream 引用让资源引用计数归零。
+	var had_player := false
 	if is_instance_valid(_intro_music_player):
-		_intro_music_player.stop()
-		_intro_music_player.stream = null
-		_intro_music_player.free()
+		_free_music_player(_intro_music_player)
+		had_player = true
 	_intro_music_player = null
 	if is_instance_valid(_start_music_player):
-		_start_music_player.stop()
-		_start_music_player.stream = null
-		_start_music_player.free()
+		_free_music_player(_start_music_player)
+		had_player = true
 	_start_music_player = null
+	if had_player:
+		flush_audio_thread()
+
+# 退出收尾安全释放一个音乐播放器节点。
+#
+# 关键：关窗 / 退出流程触发本函数时，SceneTree 往往正处于"忙于增删子节点"的阶段
+# （场景正在被销毁）。此时直接对仍挂在父节点下的播放器调用 free()，引擎会报：
+#   "Parent node is busy adding/removing children, remove_child() can't be called"
+#   "Condition 'data.parent' is true."（节点带着父节点被析构）
+# 后者意味着节点未能从父节点干净摘除，其持有的 AudioStream（CGv1.mp3 /
+# StartMusic.mp3）引用可能未及时归零，最终在退出时残留为
+# "1 resources still in use at exit"。
+#
+# 这里的关键防护顺序：
+#   1. 先停止播放并解除 stream 引用——无论节点最终能否立即 free，资源引用都先归零；
+#   2. 若父节点正忙，无法立即 remove_child / free，则退回 queue_free()，由引擎在
+#      安全时机延迟释放；节点本身（剥离 stream 后）不再持有任何资源，延迟释放无害。
+func _free_music_player(player: AudioStreamPlayer) -> void:
+	player.stop()
+	# 第一要务：解除 stream 引用。AudioStream（CGv1.mp3 / StartMusic.mp3）的引用
+	# 计数在此立即归零并回收，与节点本身能否 free 无关，从根本上消除
+	# "1 resources still in use at exit"。
+	player.stream = null
+	var parent := player.get_parent()
+	if parent == null:
+		# 无父节点：可安全立即释放。
+		player.free()
+		return
+	# 仍挂在父节点下。退出 / 关窗收尾时 SceneTree 常处于"忙于增删子节点"的阶段，
+	# 此刻对带父节点调用 free() 会触发：
+	#   "Parent node is busy adding/removing children, remove_child() can't be called"
+	#   "Condition 'data.parent' is true."（带父析构）
+	# 改用 queue_free()：它由引擎在安全时机统一摘除并释放，绝不带父析构。stream 已
+	# 置空，即便延迟释放队列在极端退出竞争下未及刷新，残留的也只是一个不再持有任何
+	# 资源的空节点，不会造成资源泄漏。
+	player.queue_free()
+
+# 等待音频混音线程跑完至少一次混音回调，把已 stop() 的 AudioStreamPlayback 从
+# AudioServer 的播放列表中真正移除。
+#
+# 背景：AudioStreamPlayer.free() 只会把 playback 标记为停止并交给音频线程异步移除，
+# playback（及其引用的 AudioStream）要等下一次混音步进才真正释放。退出（quit /
+# _exit_tree / NOTIFICATION_PREDELETE）路径下 SceneTree 已不再 tick，混音线程若没机会
+# 再跑一次，残留的 AudioStreamPlaybackMP3 + AudioStreamMP3 就会被引擎判定为
+# "ObjectDB instances leaked at exit" / "resources still in use at exit"。
+#
+# 走 _handle_close_request 的关窗路径靠 await process_frame 让混音线程推进；但
+# --quit-after / 程序化 quit() 等路径不再有帧，因此这里用一小段忙等阻塞主线程，
+# 给音频线程留出 > 一个混音缓冲的时间完成移除。仅在退出收尾调用，阻塞可忽略。
+#
+# 供各场景在退出收尾（_exit_tree / 关窗）释放自己的 AudioStreamPlayer 后调用，
+# 统一消除 BGM / 音效在退出竞争下残留的 AudioStreamPlayback 泄漏。
+func flush_audio_thread() -> void:
+	# 阻塞时长取输出延迟的若干倍（典型 output_latency ≈ 0.01~0.03s），并设下限，
+	# 确保跨过至少一次混音回调。
+	var latency := AudioServer.get_output_latency()
+	var wait_ms := int(max(60.0, latency * 4.0 * 1000.0))
+	# 分多次短睡，期间反复 lock/unlock 触发音频线程调度，比单次长睡更可靠。
+	var elapsed := 0
+	while elapsed < wait_ms:
+		AudioServer.lock()
+		AudioServer.unlock()
+		OS.delay_msec(10)
+		elapsed += 10
 
 func _clear_shared_textures() -> void:
 	shared_start_bg_frames.clear()
@@ -109,6 +184,11 @@ func _clear_shared_textures() -> void:
 # 在 SceneTree 仍运行的关窗时刻统一清一遍，确保纹理引用计数及时归零，彻底消除
 # "Texture ... leaked N bytes" 与 "resources still in use at exit"。
 func _release_scene_textures() -> void:
+	# NOTIFICATION_PREDELETE 阶段 GameState（autoload）自身已离开 SceneTree，
+	# 此时直接调用 get_tree() 会触发引擎报错 "Parameter 'data.tree' is null."。
+	# 先用 is_inside_tree() 守卫，未在树中时 SceneTree 不可达，无需遍历。
+	if not is_inside_tree():
+		return
 	var tree := get_tree()
 	if tree == null or tree.root == null:
 		return
@@ -135,6 +215,7 @@ func _strip_textures_recursive(node: Node) -> void:
 		var audio := node as AudioStreamPlayer
 		audio.stop()
 		audio.stream = null
+		audio.playing = false
 	elif node is AudioStreamPlayer2D:
 		var audio_2d := node as AudioStreamPlayer2D
 		audio_2d.stop()
@@ -177,9 +258,11 @@ func _drain_pending_threaded_loads() -> void:
 #   await GameState.wait(self, 1.5)                 # 协程等待
 #   GameState.wait(self, 1.2).connect(_on_done)     # 信号回调
 func wait(owner: Node, seconds: float) -> Signal:
-	if owner == null or not is_instance_valid(owner):
-		# 兜底：无有效宿主时退回 SceneTreeTimer（调用方通常会立即 await，
-		# 不会长期挂起；正常路径不应走到这里）。
+	if owner == null or not is_instance_valid(owner) or not owner.is_inside_tree():
+		# 兜底：无有效宿主、或宿主已不在场景树（正在 / 已离开，例如协程在死亡序列中
+		# 被 tree_exiting 唤醒后又重新调用 wait）。此时给宿主 add_child 的 Timer 永远
+		# 不会再 timeout，挂在其上的协程会残留 RefCounted。改用 SceneTreeTimer：它由
+		# 主循环驱动（关窗清理的逐帧 await 会推进并触发），不依赖已死宿主，能被回收。
 		return get_tree().create_timer(max(0.0, seconds)).timeout
 	var timer := Timer.new()
 	timer.one_shot = true
@@ -188,8 +271,34 @@ func wait(owner: Node, seconds: float) -> Signal:
 	owner.add_child(timer)
 	# 超时后自动释放该 Timer 节点，避免在 owner 上无限堆积。
 	timer.timeout.connect(timer.queue_free, CONNECT_DEFERRED)
+	# 关键：若 owner 在 timer 超时前离开场景树（敌人死亡 queue_free、切场景、退出），
+	# 挂在 timer.timeout 上的协程将永远不会被恢复，其 GDScript 函数状态（RefCounted）
+	# 会在进程退出时残留，触发非确定性的 "ObjectDB instances leaked at exit"。
+	# 这里在 owner.tree_exiting 时主动把 timer.timeout 触发一次，让等待中的协程恢复
+	# 并自然结束（协程内通常随即判断 is_instance_valid(self) 后返回），从而回收其状态。
+	#
+	# 注意：Godot 4 判定信号是否"已连接"时，对 bound Callable 只比较其基础 callable
+	# （object + method），不区分 .bind() 的参数。因此若直接用
+	# _emit_wait_timeout.bind(id)，同一 owner 在退出前多次调用 wait() 会因被视为
+	# "已连接同一 callable" 而报 "Signal 'tree_exiting' is already connected"。
+	# 这里改用 lambda：每次创建的 Callable 各不相同，不会触发重复连接检测。
+	var tid := timer.get_instance_id()
+	owner.tree_exiting.connect(func() -> void: _emit_wait_timeout(tid), CONNECT_ONE_SHOT)
 	timer.start()
 	return timer.timeout
+
+func _emit_wait_timeout(timer_id: int) -> void:
+	var timer := instance_from_id(timer_id) as Timer
+	if timer == null:
+		return
+	# 关键：owner.tree_exiting 触发时，作为 owner 子节点的 timer 通常已不在
+	# 场景树中（子节点会跟随父节点一起退 tree）。此时若再调用 timer.is_stopped()
+	# 或 timer.stop()，引擎内部会访问 SceneTree 触发
+	# "Parameter 'data.tree' is null." 报错。我们在这里只 emit timeout
+	# 唤醒挂起的协程/回调；timer 节点会随 owner 一起被销毁，无需再 stop。
+	if timer.is_inside_tree() and not timer.is_stopped():
+		timer.stop()
+	timer.timeout.emit()
 
 func prepare_start_sequence_music() -> void:
 	stop_start_sequence_music()
@@ -321,10 +430,14 @@ func _unhandled_input(event: InputEvent) -> void:
 func goto_stage(n: int) -> void:
 	if n < 1 or not has_stage(n):
 		return
-	# 进入新关卡：复位通关守卫，使下一关的 game_over 能正常触发。
+	# 进入新关卡：复位通关守卫与 game_over 队列守卫，使下一关的 game_over 能正常触发。
+	# 注意 _game_over_queued 必须在进入「任意」新关卡时复位：它在 goto_game_over
+	# 里被置位后不会自动归零，若只在 n == 1 时复位，则当玩家通关推进到第 2/3/4 关
+	# （goto_stage(2..4)）时残留的 true 会让后续关卡的 goto_game_over 被第 460 行守卫
+	# 直接 return —— 表现为钟馗三条命耗尽、死亡动画播完却不跳 GAME OVER，游戏仍可继续。
 	_level_cleared = false
+	_game_over_queued = false
 	if n == 1:
-		_game_over_queued = false
 		score = 0
 		coins = 0
 		yuanbao = 0

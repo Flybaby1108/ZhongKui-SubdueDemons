@@ -20,7 +20,7 @@ const FDK_MECHANISM_PIVOT_CROSS_WIDTH := 3.0
 const STAGE_BGM_PATHS := {
 	1: "res://assets/audio/Chapter1_BGM.mp3",
 	2: "res://assets/audio/Chapter2_BGM.mp3",
-	3: "res://assets/audio/Chapter2_BGM.mp3",
+	3: "res://assets/audio/Chapter3_BGM.mp3",
 	4: "res://assets/audio/ChapterBoss_BGM.mp3",
 }
 const PASS_EFFECT_AUDIO_PATH := "res://assets/audio/PassEffect.mp3"
@@ -81,6 +81,10 @@ var bgm_player: AudioStreamPlayer = null
 var _pass_effect_frames: Array[Texture2D] = []
 var _pass_effect_audio_stream: AudioStream = null
 var _pass_effect_assets_loading: bool = false
+# 退出 / 切场景收尾标志：置位后所有异步资源加载协程立即停止 await，避免被
+# 挂起的协程在进程退出时残留 GDScript 函数状态（RefCounted），触发
+# "ObjectDB instances leaked at exit"。
+var _tearing_down: bool = false
 var _chapter3_mechanism_preview: CanvasLayer = null
 var _pass_effect_layer: CanvasLayer = null
 var _pass_effect_frame_view: TextureRect = null
@@ -120,7 +124,13 @@ func _ready() -> void:
 	tile_map.visible = false
 	ready_done = true
 	_prepare_pass_effect_assets()
-	await RenderingServer.frame_post_draw
+	# 延后一帧再放 BGM（让首帧渲染先完成，避免开场卡顿叠加音频解码）。
+	# 不用 `await RenderingServer.frame_post_draw`：等待引擎级 server 信号会创建一个
+	# 连到 RenderingServer 的一次性信号 awaiter（RefCounted），若本关在该帧前被释放
+	# （切场景 / 退出），awaiter 与 "frame_post_draw" StringName 会残留，触发
+	# "ObjectDB instances leaked at exit" / "Orphan StringName"。改用挂在本节点下、
+	# 随节点一起销毁的 Timer（GameState.wait），生命周期受控、无残留。
+	await GameState.wait(self, 0.0)
 	if is_inside_tree():
 		_play_stage_bgm()
 
@@ -130,6 +140,7 @@ func _exit_tree() -> void:
 	release_cached_resources_for_quit()
 
 func release_cached_resources_for_quit() -> void:
+	_tearing_down = true
 	_pass_effect_assets_loading = false
 	if is_instance_valid(_pass_effect_frame_view):
 		_pass_effect_frame_view.texture = null
@@ -413,6 +424,9 @@ func spawn_summoned_enemy(scene: PackedScene, pos: Vector2) -> Node:
 	enemy_container.add_child(e)
 	if "summon_invuln_t" in e and "SUMMON_INVULN_TIME" in e:
 		e.summon_invuln_t = e.SUMMON_INVULN_TIME
+	# 召唤的敌人出现后头 1 秒内不对钟馗造成接触伤害（给玩家反应空间）
+	if "contact_damage_delay_t" in e and "SUMMON_CONTACT_DAMAGE_DELAY" in e:
+		e.contact_damage_delay_t = e.SUMMON_CONTACT_DAMAGE_DELAY
 	return e
 
 # 返回 Boss 关卡可作为召唤落点的若干平台顶部世界坐标。
@@ -680,7 +694,10 @@ func _skip_to_end_effect() -> void:
 	await _play_end_effect()
 
 func _on_time_up() -> void:
-	get_tree().reload_current_scene()
+	if level_complete:
+		return
+	level_complete = true
+	GameState.goto_game_over()
 
 func _on_stage_clear(skip_pass_effect: bool = false, skip_active_ball_wait: bool = false) -> void:
 	if level_complete:
@@ -690,6 +707,9 @@ func _on_stage_clear(skip_pass_effect: bool = false, skip_active_ball_wait: bool
 	# hold_timer 超时引爆），避免动画播完后被错误切到 GAME OVER 而非下一关。
 	GameState.mark_level_cleared()
 	GameState.add_score(int(time_remaining) * 10)
+	# 趁通关动画/黑场这段主线程相对空闲的时间，提前线程预加载下一关需要同步 load 的
+	# 重资源（尤其是 Boss 关 150+ 张序列帧）。否则切场景那一帧会被同步加载阻塞而卡顿。
+	_preload_next_stage_assets()
 	if not skip_active_ball_wait:
 		await _wait_for_active_balls_to_finish()
 	if skip_pass_effect:
@@ -706,9 +726,39 @@ func _on_stage_clear(skip_pass_effect: bool = false, skip_active_ball_wait: bool
 	var next_stage := stage_number + 1
 	GameState.current_stage = stage_number
 	if GameState.advance_stage() and GameState.current_stage == next_stage:
+		# 切场景是同步的——先把已预加载的下一关重资源取回（注销线程加载请求并写入
+		# ResourceLoader 缓存 + Boss 静态缓存），确保下一关 _ready 的 load() 命中缓存。
+		_collect_next_stage_assets()
 		GameState.goto_stage(next_stage)
 	else:
 		GameState.goto_victory()
+
+# 判断下一关是否包含 Boss（地图中存在 'B' 标记）。
+func _next_stage_has_boss() -> bool:
+	var grid: Array = LevelData.LEVELS.get(stage_number + 1, [])
+	for row in grid:
+		if String(row).find("B") != -1:
+			return true
+	return false
+
+# 在切到下一关之前，提前发起下一关重资源的线程预加载（非阻塞）。
+# 通关动画/黑场期间后台线程完成加载，避免切场景那一帧同步吞下 150+ 张贴图造成卡顿。
+func _preload_next_stage_assets() -> void:
+	if not _next_stage_has_boss():
+		return
+	for path in Boss.get_preload_resource_paths():
+		GameState.request_threaded_load(path)
+
+# 切场景前把预加载结果取回：注销 GameState 的待取回登记（避免 RefCounted 残留），
+# 并将资源登记到 Boss 静态缓存以持有引用。资源随之进入 ResourceLoader 缓存，
+# 下一关 Boss._ready() 里的 load() 即可即时命中而不再读盘解码。
+func _collect_next_stage_assets() -> void:
+	if not _next_stage_has_boss():
+		return
+	for path in Boss.get_preload_resource_paths():
+		var res := GameState.take_threaded_load(path)
+		if res != null:
+			Boss.register_preloaded(path, res)
 
 func _play_pass_effect() -> void:
 	if is_instance_valid(bgm_player) and bgm_player.playing:
@@ -882,10 +932,14 @@ func _play_end_effect() -> void:
 	# 第一遍：黑场（1秒内由全黑渐变到正常亮度），序列帧同步循环播放。
 	var elapsed := 0.0
 	while elapsed < END_EFFECT_BLACK_FADE_TIME and is_inside_tree():
+		if _tearing_down or frames.is_empty():
+			return
 		var alpha: float = clampf(1.0 - elapsed / END_EFFECT_BLACK_FADE_TIME, 0.0, 1.0)
 		black_screen.color = Color(0.0, 0.0, 0.0, alpha)
 		frame_view.texture = frames[frame_index]
 		await GameState.wait(self, frame_time)
+		if _tearing_down or frames.is_empty():
+			return
 		elapsed += frame_time
 		frame_index = (frame_index + 1) % frames.size()
 	if not is_inside_tree():
@@ -899,14 +953,20 @@ func _play_end_effect() -> void:
 	var word_step := 1.0 / END_EFFECT_WORD_FADE_FPS
 	var frame_accumulator := 0.0
 	while elapsed < END_EFFECT_WORD_FADE_TIME and is_inside_tree():
+		if _tearing_down or frames.is_empty():
+			return
 		var word_alpha: float = clampf(elapsed / END_EFFECT_WORD_FADE_TIME, 0.0, 1.0)
 		word_view.modulate = Color(1.0, 1.0, 1.0, word_alpha)
 		frame_view.texture = frames[frame_index]
 		await GameState.wait(self, word_step)
+		if _tearing_down or frames.is_empty():
+			return
 		elapsed += word_step
 		# 序列帧按自身帧率推进，与文字渐变解耦。
 		frame_accumulator += word_step
 		while frame_accumulator >= frame_time:
+			if frames.is_empty():
+				return
 			frame_accumulator -= frame_time
 			frame_index = (frame_index + 1) % frames.size()
 	if not is_inside_tree():
@@ -915,8 +975,12 @@ func _play_end_effect() -> void:
 
 	# 后续：序列帧永久循环，Word 恒显，不再黑场也不再渐变。
 	while is_inside_tree():
+		if _tearing_down or frames.is_empty():
+			return
 		frame_view.texture = frames[frame_index]
 		await GameState.wait(self, frame_time)
+		if _tearing_down or frames.is_empty():
+			return
 		frame_index = (frame_index + 1) % frames.size()
 
 func _start_end_effect_prompt_timer() -> void:
@@ -999,6 +1063,8 @@ func _ensure_pass_effect_assets_ready() -> void:
 	if not _has_pass_effect_for_stage():
 		return
 	while _pass_effect_assets_loading:
+		if _tearing_down or not is_inside_tree():
+			return
 		await get_tree().process_frame
 	if _pass_effect_audio_stream != null and _pass_effect_frames.size() == PASS_EFFECT_FRAME_COUNT:
 		return
@@ -1015,6 +1081,9 @@ func _ensure_pass_effect_assets_ready() -> void:
 		var frame_path := _get_pass_effect_frame_path(i)
 		var status := ResourceLoader.load_threaded_get_status(frame_path)
 		while status == ResourceLoader.THREAD_LOAD_IN_PROGRESS and is_inside_tree():
+			if _tearing_down:
+				_pass_effect_assets_loading = false
+				return
 			await get_tree().process_frame
 			status = ResourceLoader.load_threaded_get_status(frame_path)
 
@@ -1034,6 +1103,8 @@ func _ensure_pass_effect_assets_ready() -> void:
 func _get_threaded_audio(path: String) -> AudioStream:
 	var status := ResourceLoader.load_threaded_get_status(path)
 	while status == ResourceLoader.THREAD_LOAD_IN_PROGRESS and is_inside_tree():
+		if _tearing_down:
+			return null
 		await get_tree().process_frame
 		status = ResourceLoader.load_threaded_get_status(path)
 	if status == ResourceLoader.THREAD_LOAD_LOADED:

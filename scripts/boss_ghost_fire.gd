@@ -35,6 +35,10 @@ func _ready() -> void:
 	_apply_tuning()
 	body_entered.connect(_on_body_entered)
 
+func _exit_tree() -> void:
+	if CharTuning.tuning_changed.is_connected(_apply_tuning):
+		CharTuning.tuning_changed.disconnect(_apply_tuning)
+
 func _load_texture_with_source_fallback(path: String) -> Texture2D:
 	var tex := load(path) as Texture2D
 	if tex != null:
