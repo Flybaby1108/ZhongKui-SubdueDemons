@@ -188,7 +188,10 @@ func release_cached_resources_for_quit() -> void:
 		cg_layer.texture = null
 	if is_instance_valid(_warm_rect):
 		_warm_rect.texture = null
-	_bg_frames.clear()
+	# _bg_frames 与 GameState.shared_start_bg_frames 指向同一个 Array。场景切换到
+	# main_menu 时不能 clear()，否则会把已预加载/预热的共享缓存清空，主菜单只能重新
+	# 同步加载 46 张大图，正好卡在 CG → 开始界面的衔接帧上。
+	_bg_frames = []
 	_cg_frames.clear()
 
 func _process(delta: float) -> void:

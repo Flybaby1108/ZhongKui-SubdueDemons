@@ -8,7 +8,7 @@ signal stage_changed(new_stage: int)
 signal coins_changed(new_coins: int)
 signal yuanbao_changed(new_yuanbao: int)
 
-const MAX_LIVES := 3
+const MAX_LIVES := 5
 const MAX_STAGE := 4
 const START_MUSIC_PATH := "res://assets/audio/StartMusic.mp3"
 

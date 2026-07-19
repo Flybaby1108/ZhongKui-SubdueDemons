@@ -195,8 +195,14 @@ func _apply_pickup_tuning() -> void:
 func _apply_heart_tuning() -> void:
 	var heart_scale: float = max(0.01, CharTuning.heart_scale)
 	var heart_size := HEART_BASE_SIZE * heart_scale
+	var heart_spacing: int = int(round(CharTuning.heart_spacing))
+	hearts_container.add_theme_constant_override("separation", heart_spacing)
+	var heart_content_width: float = max(
+		heart_size.x,
+		heart_size.x * GameState.MAX_LIVES + heart_spacing * max(0, GameState.MAX_LIVES - 1)
+	)
 	var heart_content_size := Vector2(
-		heart_size.x * GameState.MAX_LIVES + hearts_container.get_theme_constant("separation") * max(0, GameState.MAX_LIVES - 1),
+		heart_content_width,
 		heart_size.y
 	)
 	hearts_container.position = Vector2(CharTuning.heart_pos_x, CharTuning.heart_pos_y)

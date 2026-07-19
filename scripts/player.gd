@@ -583,7 +583,7 @@ func _explode() -> void:
 	# 已在死亡序列中：不重复触发，避免葫芦超时与受击致死同帧叠加。
 	if _death_sequence_playing:
 		return
-	# 葫芦引爆视为致命：清空生命（HUD 三心全灭），然后走与受击/坠落死亡完全
+	# 葫芦引爆视为致命：清空生命（HUD 红心全灭），然后走与受击/坠落死亡完全
 	# 一致的死亡序列。绝不能只设 lives=0 + 直接 goto_game_over —— 那条路径在
 	# goto_game_over 被守卫（_level_cleared / _game_over_queued）拦截时会留下
 	# “lives=0 但钟馗仍存活”的悬挂状态：此后 take_damage() 因 lives<=0 提前

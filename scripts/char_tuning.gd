@@ -133,10 +133,11 @@ var drop_yuanbao_fall_half_height: float = 35.0
 var title_pos_x: float = 340.0
 var title_pos_y: float = 498.0
 var title_scale: float = 1.2
-# 关卡 HUD 钟馗生命值（三颗红心）：Hearts 容器在 HeartCounter 内的位置和红心缩放
+# 关卡 HUD 钟馗生命值：Hearts 容器在 HeartCounter 内的位置、红心缩放和红心间距
 var heart_pos_x: float = 115.0
 var heart_pos_y: float = 10.0
 var heart_scale: float = 0.94
+var heart_spacing: float = 4.0
 # 关卡 HUD 钟馗头像：AvatarFrame.png 在 HUD 根节点下的位置和缩放
 var avatar_frame_pos_x: float = 26.0
 var avatar_frame_pos_y: float = 11.0
@@ -253,6 +254,7 @@ func load_config() -> void:
 		heart_pos_x          = cfg.get_value("ui", "heart_pos_x", heart_pos_x)
 		heart_pos_y          = cfg.get_value("ui", "heart_pos_y", heart_pos_y)
 		heart_scale          = cfg.get_value("ui", "heart_scale", heart_scale)
+		heart_spacing        = cfg.get_value("ui", "heart_spacing", heart_spacing)
 		avatar_frame_pos_x   = cfg.get_value("ui", "avatar_frame_pos_x", avatar_frame_pos_x)
 		avatar_frame_pos_y   = cfg.get_value("ui", "avatar_frame_pos_y", avatar_frame_pos_y)
 		avatar_frame_scale   = cfg.get_value("ui", "avatar_frame_scale", avatar_frame_scale)
@@ -460,6 +462,7 @@ func save_config() -> void:
 	cfg.set_value("ui", "heart_pos_x", heart_pos_x)
 	cfg.set_value("ui", "heart_pos_y", heart_pos_y)
 	cfg.set_value("ui", "heart_scale", heart_scale)
+	cfg.set_value("ui", "heart_spacing", heart_spacing)
 	cfg.set_value("ui", "avatar_frame_pos_x", avatar_frame_pos_x)
 	cfg.set_value("ui", "avatar_frame_pos_y", avatar_frame_pos_y)
 	cfg.set_value("ui", "avatar_frame_scale", avatar_frame_scale)

@@ -315,6 +315,7 @@ func _build_ui() -> void:
 	_add_row("红心位置 X", "heart_pos_x", -400, 1920, 1.0)
 	_add_row("红心位置 Y", "heart_pos_y", -200, 1080, 1.0)
 	_add_row("红心大小", "heart_scale", 0.1, 4.0, 0.01)
+	_add_row("生命红心图标间距", "heart_spacing", -80, 120, 1.0)
 	_add_row("头像位置 X", "avatar_frame_pos_x", 0, 1920, 1.0)
 	_add_row("头像位置 Y", "avatar_frame_pos_y", 0, 1080, 1.0)
 	_add_row("头像大小", "avatar_frame_scale", 0.05, 3.0, 0.01)
@@ -353,10 +354,10 @@ func _build_ui() -> void:
 	title_coin_hud.add_theme_font_size_override("font_size", 22)
 	title_coin_hud.add_theme_color_override("font_color", Color(1, 0.75, 0.25, 1))
 	_vbox.add_child(title_coin_hud)
-	_add_row("铜钱图标位置 X", "coin_icon_pos_x", -400, 400, 1.0)
+	_add_row("铜钱图标位置 X", "coin_icon_pos_x", -1920, 400, 1.0)
 	_add_row("铜钱图标位置 Y", "coin_icon_pos_y", -100, 150, 1.0)
 	_add_row("铜钱图标大小", "coin_icon_scale", 0.1, 2.0, 0.01)
-	_add_row("铜钱数字位置 X", "coin_digits_pos_x", -400, 500, 1.0)
+	_add_row("铜钱数字位置 X", "coin_digits_pos_x", -1920, 500, 1.0)
 	_add_row("铜钱数字位置 Y", "coin_digits_pos_y", -100, 150, 1.0)
 	_add_row("铜钱数字大小", "coin_digits_scale", 0.1, 2.0, 0.01)
 	_vbox.add_child(HSeparator.new())
@@ -366,10 +367,10 @@ func _build_ui() -> void:
 	title_yuanbao_hud.add_theme_font_size_override("font_size", 22)
 	title_yuanbao_hud.add_theme_color_override("font_color", Color(1, 0.9, 0.35, 1))
 	_vbox.add_child(title_yuanbao_hud)
-	_add_row("元宝图标位置 X", "yuanbao_icon_pos_x", -1000, 400, 1.0)
+	_add_row("元宝图标位置 X", "yuanbao_icon_pos_x", -1920, 400, 1.0)
 	_add_row("元宝图标位置 Y", "yuanbao_icon_pos_y", -100, 150, 1.0)
 	_add_row("元宝图标大小", "yuanbao_icon_scale", 0.1, 2.0, 0.01)
-	_add_row("元宝数字位置 X", "yuanbao_digits_pos_x", -400, 500, 1.0)
+	_add_row("元宝数字位置 X", "yuanbao_digits_pos_x", -1920, 500, 1.0)
 	_add_row("元宝数字位置 Y", "yuanbao_digits_pos_y", -100, 150, 1.0)
 	_add_row("元宝数字大小", "yuanbao_digits_scale", 0.1, 2.0, 0.01)
 	_vbox.add_child(HSeparator.new())
@@ -650,6 +651,7 @@ func _reset_defaults() -> void:
 	CharTuning.heart_pos_x = 0.0
 	CharTuning.heart_pos_y = 0.0
 	CharTuning.heart_scale = 1.0
+	CharTuning.heart_spacing = 4.0
 	CharTuning.avatar_frame_pos_x = 20.0
 	CharTuning.avatar_frame_pos_y = 94.0
 	CharTuning.avatar_frame_scale = 0.5
