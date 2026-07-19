@@ -137,7 +137,7 @@ var title_scale: float = 1.2
 var heart_pos_x: float = 115.0
 var heart_pos_y: float = 10.0
 var heart_scale: float = 0.94
-var heart_spacing: float = 4.0
+var heart_spacing: float = -11.0
 # 关卡 HUD 钟馗头像：AvatarFrame.png 在 HUD 根节点下的位置和缩放
 var avatar_frame_pos_x: float = 26.0
 var avatar_frame_pos_y: float = 11.0
@@ -159,25 +159,25 @@ var boss_health_bar_pos_y: float = 46.0
 var boss_health_bar_width: float = 419.0
 var boss_health_bar_height: float = 28.0
 # 关卡 HUD 铜钱/元宝统计：图标与像素数字在各自 Counter 容器内的位置和缩放
-var coin_icon_pos_x: float = -341.0
+var coin_icon_pos_x: float = -363.0
 var coin_icon_pos_y: float = 17.0
 var coin_icon_scale: float = 0.42
-var coin_digits_pos_x: float = -264.0
+var coin_digits_pos_x: float = -296.0
 var coin_digits_pos_y: float = 18.0
 var coin_digits_scale: float = 1.0
-var yuanbao_icon_pos_x: float = -400.0
+var yuanbao_icon_pos_x: float = -512.0
 var yuanbao_icon_pos_y: float = 21.0
-var yuanbao_icon_scale: float = 0.39
-var yuanbao_digits_pos_x: float = -310.0
+var yuanbao_icon_scale: float = 0.41
+var yuanbao_digits_pos_x: float = -420.0
 var yuanbao_digits_pos_y: float = 18.0
 var yuanbao_digits_scale: float = 1.0
 # 关卡 HUD 游戏倒计时背景牌：以屏幕坐标作为中心点，缩放基于 Chapter_Countdown.png 原始尺寸。
 var countdown_bg_pos_x: float = 968.0
-var countdown_bg_pos_y: float = 45.0
+var countdown_bg_pos_y: float = 53.0
 var countdown_bg_scale: float = 1.14
 # 关卡 HUD 游戏倒计时数字：TimeLabel 在 CountdownCounter 容器内的位置和整体 Control 缩放。
-var countdown_digits_pos_x: float = 397.0
-var countdown_digits_pos_y: float = -16.0
+var countdown_digits_pos_x: float = 298.0
+var countdown_digits_pos_y: float = -9.0
 var countdown_digits_scale: float = 1.02
 # 钟馗"吸入消失点"相对钟馗中心的偏移（朝向跟随钟馗朝向自动镜像 X）
 # 敌人被吸时朝这个点飞，到达 capture 触发瞬间敌人正好在此处消失（视觉上=飞进葫芦）
