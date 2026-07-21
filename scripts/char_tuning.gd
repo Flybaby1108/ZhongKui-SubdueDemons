@@ -11,6 +11,7 @@ const FDK_HUD_TUNING_VERSION := 2
 # 用最新 baked 默认值重写。出厂校准变更时必须递增对应版本号。
 const CHAR_TUNING_VERSION := 1
 const UI_TUNING_VERSION := 1
+const BRIBERY_UI_TUNING_VERSION := 1
 
 signal tuning_changed
 
@@ -130,17 +131,17 @@ var drop_yuanbao_offset_y: float = 0.0
 var drop_yuanbao_scale: float = 0.40
 var drop_yuanbao_fall_half_height: float = 35.0
 # 主菜单标题图位置与大小（StartPicture_title.png 在 1920×1080 画布上的中心坐标 + 缩放）
-var title_pos_x: float = 340.0
-var title_pos_y: float = 498.0
-var title_scale: float = 1.2
+var title_pos_x: float = 364.0
+var title_pos_y: float = 494.0
+var title_scale: float = 1.16
 # 复活买通鬼差界面标题图（Bribery_Text.png）：左上角位置 + 缩放
-var bribery_title_pos_x: float = 120.0
-var bribery_title_pos_y: float = 140.0
-var bribery_title_scale: float = 1.0
+var bribery_title_pos_x: float = 1380.0
+var bribery_title_pos_y: float = 110.0
+var bribery_title_scale: float = 1.14
 # 复活买通鬼差界面支付说明文字：区域左上角位置 + 字号
-var bribery_prompt_pos_x: float = 650.0
-var bribery_prompt_pos_y: float = 390.0
-var bribery_prompt_font_size: float = 44.0
+var bribery_prompt_pos_x: float = 660.0
+var bribery_prompt_pos_y: float = 38.0
+var bribery_prompt_font_size: float = 34.0
 # 关卡 HUD 钟馗生命值：Hearts 容器在 HeartCounter 内的位置、红心缩放和红心间距
 var heart_pos_x: float = 115.0
 var heart_pos_y: float = 10.0
@@ -228,10 +229,14 @@ func load_config() -> void:
 	var ui_tuning_is_current: bool = (
 		cfg.get_value("meta", "ui_tuning_version", 0) == UI_TUNING_VERSION
 	)
+	var bribery_ui_tuning_is_current: bool = (
+		cfg.get_value("meta", "bribery_ui_tuning_version", 0) == BRIBERY_UI_TUNING_VERSION
+	)
 	var should_save_config: bool = (
 		not fdk_hud_tuning_is_current
 		or not char_tuning_is_current
 		or not ui_tuning_is_current
+		or not bribery_ui_tuning_is_current
 	)
 	if char_tuning_is_current:
 		sprite_scale         = cfg.get_value("char", "sprite_scale", sprite_scale)
@@ -259,12 +264,13 @@ func load_config() -> void:
 		title_pos_x          = cfg.get_value("ui", "title_pos_x", title_pos_x)
 		title_pos_y          = cfg.get_value("ui", "title_pos_y", title_pos_y)
 		title_scale          = cfg.get_value("ui", "title_scale", title_scale)
-		bribery_title_pos_x  = cfg.get_value("ui", "bribery_title_pos_x", bribery_title_pos_x)
-		bribery_title_pos_y  = cfg.get_value("ui", "bribery_title_pos_y", bribery_title_pos_y)
-		bribery_title_scale  = cfg.get_value("ui", "bribery_title_scale", bribery_title_scale)
-		bribery_prompt_pos_x = cfg.get_value("ui", "bribery_prompt_pos_x", bribery_prompt_pos_x)
-		bribery_prompt_pos_y = cfg.get_value("ui", "bribery_prompt_pos_y", bribery_prompt_pos_y)
-		bribery_prompt_font_size = cfg.get_value("ui", "bribery_prompt_font_size", bribery_prompt_font_size)
+		if bribery_ui_tuning_is_current:
+			bribery_title_pos_x  = cfg.get_value("ui", "bribery_title_pos_x", bribery_title_pos_x)
+			bribery_title_pos_y  = cfg.get_value("ui", "bribery_title_pos_y", bribery_title_pos_y)
+			bribery_title_scale  = cfg.get_value("ui", "bribery_title_scale", bribery_title_scale)
+			bribery_prompt_pos_x = cfg.get_value("ui", "bribery_prompt_pos_x", bribery_prompt_pos_x)
+			bribery_prompt_pos_y = cfg.get_value("ui", "bribery_prompt_pos_y", bribery_prompt_pos_y)
+			bribery_prompt_font_size = cfg.get_value("ui", "bribery_prompt_font_size", bribery_prompt_font_size)
 		heart_pos_x          = cfg.get_value("ui", "heart_pos_x", heart_pos_x)
 		heart_pos_y          = cfg.get_value("ui", "heart_pos_y", heart_pos_y)
 		heart_scale          = cfg.get_value("ui", "heart_scale", heart_scale)
@@ -388,6 +394,7 @@ func save_config() -> void:
 	cfg.set_value("meta", "fdk_hud_tuning_version", FDK_HUD_TUNING_VERSION)
 	cfg.set_value("meta", "char_tuning_version", CHAR_TUNING_VERSION)
 	cfg.set_value("meta", "ui_tuning_version", UI_TUNING_VERSION)
+	cfg.set_value("meta", "bribery_ui_tuning_version", BRIBERY_UI_TUNING_VERSION)
 	cfg.set_value("char", "sprite_scale", sprite_scale)
 	cfg.set_value("char", "sprite_offset_x", sprite_offset_x)
 	cfg.set_value("char", "sprite_offset_y", sprite_offset_y)

@@ -707,12 +707,12 @@ func _reset_defaults() -> void:
 	CharTuning.countdown_digits_pos_x = 298.0
 	CharTuning.countdown_digits_pos_y = -9.0
 	CharTuning.countdown_digits_scale = 1.02
-	CharTuning.bribery_title_pos_x = 120.0
-	CharTuning.bribery_title_pos_y = 140.0
-	CharTuning.bribery_title_scale = 1.0
-	CharTuning.bribery_prompt_pos_x = 650.0
-	CharTuning.bribery_prompt_pos_y = 390.0
-	CharTuning.bribery_prompt_font_size = 44.0
+	CharTuning.bribery_title_pos_x = 1380.0
+	CharTuning.bribery_title_pos_y = 110.0
+	CharTuning.bribery_title_scale = 1.14
+	CharTuning.bribery_prompt_pos_x = 660.0
+	CharTuning.bribery_prompt_pos_y = 38.0
+	CharTuning.bribery_prompt_font_size = 34.0
 	for row in _rows:
 		if not _is_row_valid(row):
 			continue
