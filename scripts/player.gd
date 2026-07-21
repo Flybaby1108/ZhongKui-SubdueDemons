@@ -27,6 +27,11 @@ const WORLD_BOTTOM := 1080.0
 const BODY_HALF_W := 35.0
 const BODY_HEAD := 65.0
 const BODY_FOOT := 75.0
+const DROP_THROUGH_DISTANCE := 18.0
+const DROP_THROUGH_VELOCITY := 500.0
+const DROP_THROUGH_FOOT_PROBE_UP := 3.0
+const DROP_THROUGH_FOOT_PROBE_DOWN := 14.0
+const DROP_THROUGH_FOOT_INSET := 4.0
 
 @onready var sprite: Sprite2D = $Sprite
 @onready var collision: CollisionShape2D = $Collision
@@ -53,6 +58,7 @@ var vacuum_charge_timer: float = 0.0
 var captured_enemies: Array = []
 # 正在"飞向葫芦"动画中的敌人（不算已捕获，不能被发射；动画完成后转入 captured_enemies）
 var _in_flight_enemies: Array = []
+var _shoot_when_capture_ready: bool = false
 var hold_timer: float = 0.0
 var vacuum_armed: bool = false
 var last_damage_frame: int = -1000
@@ -386,7 +392,7 @@ func _physics_process(delta: float) -> void:
 		velocity.y = JUMP_VELOCITY
 		is_switching_platform = true
 
-	if Input.is_action_just_pressed("move_down") and is_on_floor():
+	if Input.is_action_just_pressed("move_down"):
 		_try_drop_through_platform()
 
 	if not vacuum_armed:
@@ -396,6 +402,8 @@ func _physics_process(delta: float) -> void:
 		is_charging_vacuum = false
 		vacuum_charge_timer = 0.0
 	else:
+		if Input.is_action_just_pressed("vacuum"):
+			_shoot_when_capture_ready = false
 		var holding := Input.is_action_pressed("vacuum") and captured_enemies.size() < MAX_CAPTURED
 		if holding:
 			vacuum_charge_timer += delta
@@ -410,8 +418,8 @@ func _physics_process(delta: float) -> void:
 			is_charging_vacuum = false
 			is_vacuuming = false
 			vacuum_charge_timer = 0.0
-		if Input.is_action_just_released("vacuum") and captured_enemies.size() > 0:
-			_shoot_balls()
+		if Input.is_action_just_released("vacuum"):
+			_handle_vacuum_released()
 
 
 	move_and_slide()
@@ -506,6 +514,7 @@ func _tick_in_flight_enemies() -> void:
 	if _in_flight_enemies.is_empty():
 		return
 	var still_flying: Array = []
+	var captured_any := false
 	for enemy in _in_flight_enemies:
 		if not is_instance_valid(enemy):
 			continue
@@ -513,9 +522,25 @@ func _tick_in_flight_enemies() -> void:
 			# 飞行动画完成（enemy._physics_process 内自动 become_captured()）
 			_play_inhale_enter_sfx()
 			captured_enemies.append(enemy)
+			captured_any = true
 		else:
 			still_flying.append(enemy)
 	_in_flight_enemies = still_flying
+	if captured_any and _shoot_when_capture_ready and not captured_enemies.is_empty():
+		var keep_waiting := not _in_flight_enemies.is_empty()
+		_shoot_balls()
+		_shoot_when_capture_ready = keep_waiting
+
+func _handle_vacuum_released() -> void:
+	_tick_in_flight_enemies()
+	if not captured_enemies.is_empty():
+		var keep_waiting := not _in_flight_enemies.is_empty()
+		_shoot_balls()
+		_shoot_when_capture_ready = keep_waiting
+	elif not _in_flight_enemies.is_empty():
+		_shoot_when_capture_ready = true
+	else:
+		_shoot_when_capture_ready = false
 
 func _capture_enemy(enemy: Node) -> void:
 	captured_enemies.append(enemy)
@@ -547,6 +572,7 @@ func _shoot_balls() -> void:
 		enemy.call_deferred("queue_free")
 	captured_enemies.clear()
 	hold_timer = 0.0
+	_shoot_when_capture_ready = false
 
 func _tick_hold_timer(delta: float) -> void:
 	# 关卡已通关（进入通关动画流程）：停止累积 hold_timer，避免动画期间葫芦持有
@@ -580,6 +606,7 @@ func _explode() -> void:
 			enemy.call_deferred("queue_free")
 	captured_enemies.clear()
 	hold_timer = 0.0
+	_shoot_when_capture_ready = false
 	# 已在死亡序列中：不重复触发，避免葫芦超时与受击致死同帧叠加。
 	if _death_sequence_playing:
 		return
@@ -787,6 +814,7 @@ func _play_death_sequence() -> void:
 	is_charging_vacuum = false
 	vacuum_charge_timer = 0.0
 	vacuum_armed = false
+	_shoot_when_capture_ready = false
 	hold_warning.visible = false
 	suction_visual.visible = false
 	suction_area.monitoring = false
@@ -831,14 +859,58 @@ func _start_death_followup() -> void:
 	GameState.goto_game_over()
 
 func _try_drop_through_platform() -> void:
+	if not is_on_floor() and not _has_one_way_tile_underfoot():
+		return
 	for i in range(get_slide_collision_count()):
 		var c := get_slide_collision(i)
-		var collider = c.get_collider()
-		if collider is TileMapLayer:
-			var tile_pos: Vector2i = collider.local_to_map(collider.to_local(c.get_position() - c.get_normal()))
-			var data: TileData = collider.get_cell_tile_data(tile_pos)
-			if data and data.get_collision_polygons_count(0) > 0 and data.is_collision_polygon_one_way(0, 0):
-				position.y += 10.0
-				velocity.y = 400.0
-				is_switching_platform = true
-				return
+		if _is_one_way_tile_collision(c):
+			_start_drop_through_platform()
+			return
+	if _has_one_way_tile_underfoot():
+		_start_drop_through_platform()
+
+func _start_drop_through_platform() -> void:
+	position.y += DROP_THROUGH_DISTANCE
+	velocity.y = DROP_THROUGH_VELOCITY
+	is_switching_platform = true
+
+func _is_one_way_tile_collision(c: KinematicCollision2D) -> bool:
+	var collider = c.get_collider()
+	if not collider is TileMapLayer:
+		return false
+	return _is_one_way_tile_at(collider, c.get_position() - c.get_normal())
+
+func _has_one_way_tile_underfoot() -> bool:
+	var body_shape := collision.shape as RectangleShape2D
+	if body_shape == null:
+		return false
+	var half_w := body_shape.size.x * absf(collision.global_scale.x) * 0.5
+	var foot_y := collision.global_position.y + body_shape.size.y * absf(collision.global_scale.y) * 0.5
+	var probe_offsets := [0.0]
+	var edge_offset = maxf(0.0, half_w - DROP_THROUGH_FOOT_INSET)
+	if edge_offset > 0.0:
+		probe_offsets.append(-edge_offset)
+		probe_offsets.append(edge_offset)
+
+	var space_state := get_world_2d().direct_space_state
+	for offset_x in probe_offsets:
+		var from := Vector2(global_position.x + float(offset_x), foot_y - DROP_THROUGH_FOOT_PROBE_UP)
+		var to := Vector2(from.x, foot_y + DROP_THROUGH_FOOT_PROBE_DOWN)
+		var query := PhysicsRayQueryParameters2D.create(from, to, collision_mask, [get_rid()])
+		var hit := space_state.intersect_ray(query)
+		if hit.is_empty():
+			continue
+		var collider = hit.get("collider")
+		if collider is TileMapLayer and _is_one_way_tile_at(collider, hit.get("position") + Vector2.DOWN):
+			return true
+	return false
+
+func _is_one_way_tile_at(tile_layer: TileMapLayer, world_pos: Vector2) -> bool:
+	var tile_pos: Vector2i = tile_layer.local_to_map(tile_layer.to_local(world_pos))
+	var data: TileData = tile_layer.get_cell_tile_data(tile_pos)
+	if data == null:
+		return false
+	for polygon_index in range(data.get_collision_polygons_count(0)):
+		if data.is_collision_polygon_one_way(0, polygon_index):
+			return true
+	return false

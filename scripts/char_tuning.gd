@@ -133,6 +133,14 @@ var drop_yuanbao_fall_half_height: float = 35.0
 var title_pos_x: float = 340.0
 var title_pos_y: float = 498.0
 var title_scale: float = 1.2
+# 复活买通鬼差界面标题图（Bribery_Text.png）：左上角位置 + 缩放
+var bribery_title_pos_x: float = 120.0
+var bribery_title_pos_y: float = 140.0
+var bribery_title_scale: float = 1.0
+# 复活买通鬼差界面支付说明文字：区域左上角位置 + 字号
+var bribery_prompt_pos_x: float = 650.0
+var bribery_prompt_pos_y: float = 390.0
+var bribery_prompt_font_size: float = 44.0
 # 关卡 HUD 钟馗生命值：Hearts 容器在 HeartCounter 内的位置、红心缩放和红心间距
 var heart_pos_x: float = 115.0
 var heart_pos_y: float = 10.0
@@ -251,6 +259,12 @@ func load_config() -> void:
 		title_pos_x          = cfg.get_value("ui", "title_pos_x", title_pos_x)
 		title_pos_y          = cfg.get_value("ui", "title_pos_y", title_pos_y)
 		title_scale          = cfg.get_value("ui", "title_scale", title_scale)
+		bribery_title_pos_x  = cfg.get_value("ui", "bribery_title_pos_x", bribery_title_pos_x)
+		bribery_title_pos_y  = cfg.get_value("ui", "bribery_title_pos_y", bribery_title_pos_y)
+		bribery_title_scale  = cfg.get_value("ui", "bribery_title_scale", bribery_title_scale)
+		bribery_prompt_pos_x = cfg.get_value("ui", "bribery_prompt_pos_x", bribery_prompt_pos_x)
+		bribery_prompt_pos_y = cfg.get_value("ui", "bribery_prompt_pos_y", bribery_prompt_pos_y)
+		bribery_prompt_font_size = cfg.get_value("ui", "bribery_prompt_font_size", bribery_prompt_font_size)
 		heart_pos_x          = cfg.get_value("ui", "heart_pos_x", heart_pos_x)
 		heart_pos_y          = cfg.get_value("ui", "heart_pos_y", heart_pos_y)
 		heart_scale          = cfg.get_value("ui", "heart_scale", heart_scale)
@@ -459,6 +473,12 @@ func save_config() -> void:
 	cfg.set_value("ui", "title_pos_x", title_pos_x)
 	cfg.set_value("ui", "title_pos_y", title_pos_y)
 	cfg.set_value("ui", "title_scale", title_scale)
+	cfg.set_value("ui", "bribery_title_pos_x", bribery_title_pos_x)
+	cfg.set_value("ui", "bribery_title_pos_y", bribery_title_pos_y)
+	cfg.set_value("ui", "bribery_title_scale", bribery_title_scale)
+	cfg.set_value("ui", "bribery_prompt_pos_x", bribery_prompt_pos_x)
+	cfg.set_value("ui", "bribery_prompt_pos_y", bribery_prompt_pos_y)
+	cfg.set_value("ui", "bribery_prompt_font_size", bribery_prompt_font_size)
 	cfg.set_value("ui", "heart_pos_x", heart_pos_x)
 	cfg.set_value("ui", "heart_pos_y", heart_pos_y)
 	cfg.set_value("ui", "heart_scale", heart_scale)

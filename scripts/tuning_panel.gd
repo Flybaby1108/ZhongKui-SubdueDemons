@@ -307,6 +307,26 @@ func _build_ui() -> void:
 	_add_row("Title Scale",       "title_scale",     0.1, 3.0,  0.02)
 	_vbox.add_child(HSeparator.new())
 
+	var title_bribery := Label.new()
+	title_bribery.text = "▼ 复活标题 (Bribery_Text)"
+	title_bribery.add_theme_font_size_override("font_size", 22)
+	title_bribery.add_theme_color_override("font_color", Color(1.0, 0.78, 0.28, 1))
+	_vbox.add_child(title_bribery)
+	_add_row("复活标题位置 X", "bribery_title_pos_x", -400, 1920, 2.0)
+	_add_row("复活标题位置 Y", "bribery_title_pos_y", -400, 1080, 2.0)
+	_add_row("复活标题大小", "bribery_title_scale", 0.1, 3.0, 0.02)
+	_vbox.add_child(HSeparator.new())
+
+	var title_bribery_prompt := Label.new()
+	title_bribery_prompt.text = "▼ 复活支付文字"
+	title_bribery_prompt.add_theme_font_size_override("font_size", 22)
+	title_bribery_prompt.add_theme_color_override("font_color", Color(1.0, 0.9, 0.58, 1))
+	_vbox.add_child(title_bribery_prompt)
+	_add_row("复活支付文字位置 X", "bribery_prompt_pos_x", 0, 1920, 2.0)
+	_add_row("复活支付文字位置 Y", "bribery_prompt_pos_y", 0, 1080, 2.0)
+	_add_row("复活支付文字大小", "bribery_prompt_font_size", 18, 96, 1.0)
+	_vbox.add_child(HSeparator.new())
+
 	var title_avatar_hud := Label.new()
 	title_avatar_hud.text = "▼ 关卡 HUD 钟馗生命/头像"
 	title_avatar_hud.add_theme_font_size_override("font_size", 22)
@@ -687,6 +707,12 @@ func _reset_defaults() -> void:
 	CharTuning.countdown_digits_pos_x = 298.0
 	CharTuning.countdown_digits_pos_y = -9.0
 	CharTuning.countdown_digits_scale = 1.02
+	CharTuning.bribery_title_pos_x = 120.0
+	CharTuning.bribery_title_pos_y = 140.0
+	CharTuning.bribery_title_scale = 1.0
+	CharTuning.bribery_prompt_pos_x = 650.0
+	CharTuning.bribery_prompt_pos_y = 390.0
+	CharTuning.bribery_prompt_font_size = 44.0
 	for row in _rows:
 		if not _is_row_valid(row):
 			continue

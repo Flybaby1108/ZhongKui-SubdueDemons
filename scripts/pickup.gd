@@ -50,9 +50,9 @@ var _collected: bool = false
 const VALUES := {
 	Type.APPLE: 100,
 	Type.CHERRY: 200,
-	Type.STAR: 500,
+	Type.STAR: 0,
 	Type.HEART: 0,
-	Type.COIN: 100,
+	Type.COIN: 0,
 }
 
 # 单贴图道具的纹理路径。COIN 用单独的 FRAMES 列表
@@ -200,7 +200,7 @@ func _on_body_entered(body: Node) -> void:
 	if pickup_type == Type.HEART:
 		GameState.gain_life()
 	else:
-		GameState.add_score(VALUES[pickup_type])
+		GameState.add_score(_get_score_value())
 		if pickup_type == Type.COIN:
 			_play_pickup_fly_to_hud("play_coin_pickup_fly")
 			GameState.add_coin()
@@ -210,6 +210,13 @@ func _on_body_entered(body: Node) -> void:
 			GameState.add_yuanbao()
 			_play_pickup_sfx(YUANBAO_PICKUP_SFX_PATH)
 	call_deferred("queue_free")
+
+func _get_score_value() -> int:
+	if pickup_type == Type.COIN:
+		return GameState.COIN_SCORE_VALUE
+	if pickup_type == Type.STAR:
+		return GameState.YUANBAO_SCORE_VALUE
+	return VALUES[pickup_type]
 
 func _play_pickup_fly_to_hud(method_name: StringName) -> void:
 	var hud := _get_hud()

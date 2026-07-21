@@ -11,6 +11,10 @@ signal yuanbao_changed(new_yuanbao: int)
 const MAX_LIVES := 5
 const MAX_STAGE := 4
 const START_MUSIC_PATH := "res://assets/audio/StartMusic.mp3"
+const COPPER_COINS_PER_YUANBAO := 5
+const REVIVE_COST_COIN_VALUE := 15
+const COIN_SCORE_VALUE := 100
+const YUANBAO_SCORE_VALUE := COIN_SCORE_VALUE * COPPER_COINS_PER_YUANBAO
 
 var score: int = 0
 var coins: int = 0
@@ -393,6 +397,73 @@ func add_coin(amount: int = 1) -> void:
 func add_yuanbao(amount: int = 1) -> void:
 	yuanbao += amount
 	yuanbao_changed.emit(yuanbao)
+
+func yuanbao_to_coin_value(amount: int = 1) -> int:
+	var safe_amount: int = amount if amount > 0 else 0
+	return safe_amount * COPPER_COINS_PER_YUANBAO
+
+func currency_to_coin_value(coin_amount: int = coins, yuanbao_amount: int = yuanbao) -> int:
+	var safe_coin_amount: int = coin_amount if coin_amount > 0 else 0
+	return safe_coin_amount + yuanbao_to_coin_value(yuanbao_amount)
+
+func coin_value_to_yuanbao_value(coin_value: int) -> float:
+	var safe_coin_value: int = coin_value if coin_value > 0 else 0
+	return float(safe_coin_value) / float(COPPER_COINS_PER_YUANBAO)
+
+func split_coin_value(coin_value: int) -> Dictionary:
+	var safe_coin_value: int = coin_value if coin_value > 0 else 0
+	return {
+		"yuanbao": safe_coin_value / COPPER_COINS_PER_YUANBAO,
+		"coins": safe_coin_value % COPPER_COINS_PER_YUANBAO,
+	}
+
+func can_afford_coin_value(coin_value: int) -> bool:
+	return currency_to_coin_value() >= max(0, coin_value)
+
+func get_coin_value_payment(coin_value: int) -> Dictionary:
+	var cost: int = max(0, coin_value)
+	var paid_coins: int = min(coins, cost)
+	cost -= paid_coins
+	var paid_yuanbao := 0
+	var change_coins := 0
+	if cost > 0:
+		paid_yuanbao = ceili(float(cost) / float(COPPER_COINS_PER_YUANBAO))
+		change_coins = paid_yuanbao * COPPER_COINS_PER_YUANBAO - cost
+	return {
+		"coins": paid_coins,
+		"yuanbao": paid_yuanbao,
+		"change_coins": change_coins,
+	}
+
+func spend_coin_value(coin_value: int) -> bool:
+	var cost: int = max(0, coin_value)
+	if cost == 0:
+		return true
+	if currency_to_coin_value() < cost:
+		return false
+	var payment := get_coin_value_payment(cost)
+	coins -= payment["coins"]
+	yuanbao -= payment["yuanbao"]
+	coins += payment["change_coins"]
+	coins_changed.emit(coins)
+	yuanbao_changed.emit(yuanbao)
+	return true
+
+func can_revive_from_game_over() -> bool:
+	return can_afford_coin_value(REVIVE_COST_COIN_VALUE) and has_stage(current_stage)
+
+func revive_from_game_over() -> bool:
+	if not can_revive_from_game_over():
+		return false
+	if not spend_coin_value(REVIVE_COST_COIN_VALUE):
+		return false
+	_level_cleared = false
+	_game_over_queued = false
+	lives = MAX_LIVES
+	lives_changed.emit(lives)
+	stage_changed.emit(current_stage)
+	get_tree().change_scene_to_file(_get_stage_scene_path(current_stage))
+	return true
 
 func lose_life() -> int:
 	lives = max(0, lives - 1)
