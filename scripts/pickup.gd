@@ -37,6 +37,7 @@ var _coin_anim_timer: float = 0.0
 var _fall_vel: float = 0.0
 var _landed: bool = false
 var _fall_half_height: float = FALL_HALF_HEIGHT
+var _locked_fall_surface_y: float = NAN
 
 # STAR 序列帧状态
 var _star_frames: Array = []
@@ -130,6 +131,20 @@ func _apply_tuning() -> void:
 	else:
 		_fall_half_height = FALL_HALF_HEIGHT
 	sprite.scale = Vector2(s, s)
+	if not is_nan(_locked_fall_surface_y):
+		_land_on_locked_surface()
+
+func lock_fall_to_surface(surface_y: float) -> void:
+	if is_nan(surface_y):
+		return
+	_locked_fall_surface_y = surface_y
+	if FALLS_TO_GROUND.get(pickup_type, false):
+		_land_on_locked_surface()
+
+func _land_on_locked_surface() -> void:
+	global_position.y = _locked_fall_surface_y - _fall_half_height
+	_fall_vel = 0.0
+	_landed = true
 
 func _process(delta: float) -> void:
 	# COIN 序列帧动画（独立于 lifetime fade）

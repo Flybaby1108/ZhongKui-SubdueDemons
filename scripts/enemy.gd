@@ -555,8 +555,10 @@ const FDK_ATTACK3_SUMMON_FRAME := 10
 # 三层平台降落点的 X 取值范围（仅作为拿不到关卡几何时的地面兜底横向区间）。
 const FDK_ATTACK3_SPAWN_X_MIN := 260.0
 const FDK_ATTACK3_SPAWN_X_MAX := 1650.0
-# 在目标平台横向范围内取 X 时，左右各留这么多像素边距，避免敌人落在平台边缘外翻下去。
-const FDK_ATTACK3_LANDING_EDGE_MARGIN := 60.0
+# 在目标平台横向范围内取 X 时，左右各留这么多像素边距。
+# 这个值需要覆盖召唤池里最大碰撞盒的侧向外扩，避免敌人脚点虽然在平台上、
+# 但身体出生或巡逻时插进 chapter3 中层平台左侧墙角。
+const FDK_ATTACK3_LANDING_EDGE_MARGIN := 96.0
 # 召唤落点避开钟馗，防止敌人刚落下就和玩家碰撞扣血。
 const FDK_ATTACK3_PLAYER_SAFE_X := 180.0
 const FDK_ATTACK3_PLAYER_SAFE_Y := 180.0
@@ -566,6 +568,7 @@ const FDK_ATTACK3_SPAWN_PICK_ATTEMPTS := 10
 const FDK_ATTACK3_DROP_HEIGHT := 120.0
 # 归类三层落点时，判定两块平台是否属于"同一层"的表面高度容差（像素）。
 const FDK_ATTACK3_TIER_Y_TOLERANCE := 40.0
+const PLATFORM_BODY_SIDE_CLEARANCE := 2.0
 # 可供 Attack3 降落召唤的随机敌人场景（与 Boss 召唤一致的四种杂兵）。
 const FDK_SUMMON_SCENE_PATHS := [
 	"res://scenes/enemy_meteor_hammer.tscn",
@@ -915,6 +918,7 @@ var _pending_ball_reward_armed: bool = false
 var _pending_ball_reward_type: int = -1
 var _pending_ball_reward_pos: Vector2 = Vector2.ZERO
 var _pending_ball_reward_parent: Node = null
+var _pending_ball_reward_surface_y: float = NAN
 
 const SUCTION_FLIGHT_STRETCH_MAX := 0.70
 const SUCTION_FLIGHT_SQUASH_MAX := 0.30
@@ -1088,8 +1092,11 @@ func _process_walking_enemy(delta: float) -> void:
 		global_position.x -= wall_direction * WALL_REBOUND_NUDGE
 		if not turned_early:
 			direction = -direction
-	if is_on_floor() and not _has_ground_ahead():
-		direction = -direction
+	var clamped_to_platform := false
+	if is_on_floor():
+		clamped_to_platform = _clamp_to_walkable_platform()
+		if not clamped_to_platform and not _has_ground_ahead():
+			direction = -direction
 	# 被吸状态下 flip_h 与纹理由 _apply_capture_texture 接管，不在此覆盖
 	if not is_being_shrunk:
 		sprite.flip_h = (direction < 0) if default_facing_right else (direction > 0)
@@ -1246,7 +1253,7 @@ func _perform_dash_teleport() -> void:
 		if _is_ground_under(try_x, global_position.y):
 			target_x = try_x
 			break
-	global_position.x = target_x
+	global_position.x = _clamp_x_to_walkable_platform(target_x, global_position.y)
 
 # 测试给定世界坐标下方是否有 tile 平台（避免突进到空中）
 func _is_ground_under(world_x: float, world_y: float) -> bool:
@@ -2039,6 +2046,67 @@ func _has_wall_ahead() -> bool:
 	wall_check.force_raycast_update()
 	return wall_check.is_colliding()
 
+func _get_collision_local_rect() -> Rect2:
+	if collision != null and collision.shape is RectangleShape2D:
+		var rect_shape := collision.shape as RectangleShape2D
+		return Rect2(collision.position - rect_shape.size * 0.5, rect_shape.size)
+	return Rect2(Vector2(-30.0, -70.0), Vector2(60.0, 70.0))
+
+func _clamp_x_to_walkable_platform(world_x: float, world_y: float) -> float:
+	var level := _get_level()
+	if level == null or not level.has_method("find_platform_for"):
+		return world_x
+	var body_rect := _get_collision_local_rect()
+	var platform = _find_platform_for_body_clamp(level, world_x, world_y, body_rect)
+	if platform == null:
+		return world_x
+	var platform_left_edge: float = float(platform["left_x"]) - 5.0 + PLATFORM_BODY_SIDE_CLEARANCE
+	var platform_right_edge: float = float(platform["right_x"]) + 5.0 - PLATFORM_BODY_SIDE_CLEARANCE
+	var min_x := platform_left_edge - body_rect.position.x
+	var max_x := platform_right_edge - body_rect.end.x
+	if min_x > max_x:
+		return (min_x + max_x) * 0.5
+	return clampf(world_x, min_x, max_x)
+
+func _find_platform_for_body_clamp(level: Node, world_x: float, world_y: float,
+		body_rect: Rect2) -> Variant:
+	var platform = level.find_platform_for(Vector2(world_x, world_y))
+	if platform != null:
+		return platform
+	if not level.has_method("get_platforms"):
+		return null
+	var body_reach: float = max(abs(body_rect.position.x), abs(body_rect.end.x)) + 20.0
+	var best: Variant = null
+	var best_dist := INF
+	for p in level.get_platforms():
+		if not (p is Dictionary) or not p.has("top_y") or not p.has("left_x") or not p.has("right_x"):
+			continue
+		if abs(world_y - float(p["top_y"])) > 18.0:
+			continue
+		var left_edge: float = float(p["left_x"]) - 5.0 - body_reach
+		var right_edge: float = float(p["right_x"]) + 5.0 + body_reach
+		if world_x < left_edge or world_x > right_edge:
+			continue
+		var dist: float = 0.0
+		if world_x < float(p["left_x"]):
+			dist = float(p["left_x"]) - world_x
+		elif world_x > float(p["right_x"]):
+			dist = world_x - float(p["right_x"])
+		if dist < best_dist:
+			best_dist = dist
+			best = p
+	return best
+
+func _clamp_to_walkable_platform() -> bool:
+	var before_x := global_position.x
+	var clamped_x := _clamp_x_to_walkable_platform(before_x, global_position.y)
+	if abs(clamped_x - before_x) <= 0.01:
+		return false
+	global_position.x = clamped_x
+	velocity.x = 0.0
+	direction = 1 if clamped_x > before_x else -1
+	return true
+
 # ───────── 跨平台跳跃（HOP） ─────────
 # 懒加载：向上查找含 get_platforms 方法的祖先节点（即 Level）
 func _get_level() -> Node:
@@ -2406,6 +2474,7 @@ func arm_ball_reward(hit_position: Vector2, pickup_type: int, drop_parent: Node)
 	_pending_ball_reward_type = pickup_type
 	_pending_ball_reward_pos = hit_position
 	_pending_ball_reward_parent = drop_parent
+	_pending_ball_reward_surface_y = _find_reward_surface_y(hit_position, drop_parent)
 
 func _drop_pending_ball_reward() -> void:
 	if not _pending_ball_reward_armed:
@@ -2429,6 +2498,45 @@ func _drop_pending_ball_reward() -> void:
 		reward.global_position = _pending_ball_reward_pos + Vector2(CharTuning.drop_yuanbao_offset_x, CharTuning.drop_yuanbao_offset_y)
 	else:
 		reward.global_position = _pending_ball_reward_pos
+	if not is_nan(_pending_ball_reward_surface_y) and reward.has_method("lock_fall_to_surface"):
+		reward.lock_fall_to_surface(_pending_ball_reward_surface_y)
+
+func _find_reward_surface_y(hit_position: Vector2, drop_parent: Node) -> float:
+	var level := _find_level_from_node(drop_parent)
+	if level == null:
+		level = _get_level()
+	if level != null and level.has_method("find_platform_for"):
+		var platform = level.find_platform_for(hit_position)
+		if platform != null and platform.has("top_y"):
+			return float(platform["top_y"])
+	return _find_nearby_floor_y(hit_position)
+
+func _find_level_from_node(node: Node) -> Node:
+	var n := node
+	while n != null:
+		if n.has_method("find_platform_for"):
+			return n
+		n = n.get_parent()
+	return null
+
+func _find_nearby_floor_y(hit_position: Vector2) -> float:
+	var space := get_world_2d().direct_space_state
+	var best_y := NAN
+	var best_dist := INF
+	for offset_x in [0.0, -24.0, 24.0, -48.0, 48.0]:
+		var from := hit_position + Vector2(offset_x, -8.0)
+		var to := hit_position + Vector2(offset_x, 96.0)
+		var ray := PhysicsRayQueryParameters2D.create(from, to)
+		ray.collision_mask = 1
+		ray.exclude = [get_rid()]
+		var hit := space.intersect_ray(ray)
+		if hit.is_empty():
+			continue
+		var dist: float = abs(float(hit.position.y) - hit_position.y)
+		if dist < best_dist:
+			best_dist = dist
+			best_y = float(hit.position.y)
+	return best_y
 
 func die() -> void:
 	if dying:

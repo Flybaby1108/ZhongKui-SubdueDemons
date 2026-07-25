@@ -1,8 +1,9 @@
-[gd_scene load_steps=5 format=3 uid="uid://b8main0001"]
+[gd_scene load_steps=6 format=3 uid="uid://b8main0001"]
 
 [ext_resource type="Script" uid="uid://bl7hulorku22u" path="res://scripts/main_menu.gd" id="1_menu"]
 [ext_resource type="Texture2D" path="res://assets/sprites/Start/StartBackground/StartBackground_01.jpg" id="2_bg"]
 [ext_resource type="Texture2D" path="res://assets/sprites/Start/StartPicture_title.png" id="3_title"]
+[ext_resource type="Texture2D" path="res://assets/sprites/Guide/Guide.jpg" id="4_guide"]
 
 [sub_resource type="StyleBoxFlat" id="LoadingBarBg"]
 bg_color = Color(0.08, 0.08, 0.12, 0.85)
@@ -74,3 +75,23 @@ theme_override_colors/font_color = Color(1, 1, 1, 1)
 theme_override_colors/font_outline_color = Color(0, 0, 0, 1)
 theme_override_constants/outline_size = 5
 theme_override_font_sizes/font_size = 28
+
+[node name="GuidePage" type="Control" parent="."]
+visible = false
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+
+[node name="Dim" type="ColorRect" parent="GuidePage"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+color = Color(0, 0, 0, 1)
+
+[node name="GuideImage" type="TextureRect" parent="GuidePage"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+texture = ExtResource("4_guide")
+expand_mode = 1
+stretch_mode = 5

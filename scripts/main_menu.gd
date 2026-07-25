@@ -1,6 +1,7 @@
 extends Control
 
 const STAGE_1_PATH := "res://scenes/level_1.tscn"
+const GUIDE_KEY := KEY_G
 const BLINK_PERIOD := 0.9  # 闪烁周期（秒）
 
 # 背景循环播放（从 mp4 抽帧得到的 46 张 1920×1080 JPG）
@@ -16,6 +17,7 @@ const TITLE_FADE_IN_DURATION := 1.5
 @onready var loading_label: Label = $LoadingLabel
 @onready var background: TextureRect = $Background
 @onready var title: Sprite2D = $Title
+@onready var guide_page: Control = $GuidePage
 
 var _loading_done: bool = false
 var _blink_t: float = 0.0
@@ -96,7 +98,7 @@ func _process(delta: float) -> void:
 				loading_label.text = "加载中… %d%%" % int(percent)
 			ResourceLoader.THREAD_LOAD_LOADED:
 				loading_bar.value = 100.0
-				loading_label.text = "按回车键开始游戏"
+				loading_label.text = "按回车键开始游戏 | 按G键查看新手导读"
 				_loading_done = true
 			ResourceLoader.THREAD_LOAD_FAILED, ResourceLoader.THREAD_LOAD_INVALID_RESOURCE:
 				loading_label.text = "加载失败"
@@ -110,6 +112,15 @@ func _process(delta: float) -> void:
 	loading_label.modulate.a = alpha
 
 func _input(event: InputEvent) -> void:
+	if guide_page.visible:
+		if event.is_action_pressed("ui_cancel") or event.is_action_pressed("pause"):
+			guide_page.visible = false
+			get_viewport().set_input_as_handled()
+		return
+	if event is InputEventKey and event.pressed and not event.echo and event.keycode == GUIDE_KEY:
+		guide_page.visible = true
+		get_viewport().set_input_as_handled()
+		return
 	# 回车键开始游戏（ui_accept 默认含回车）
 	if event.is_action_pressed("ui_accept"):
 		if not _loading_done:
