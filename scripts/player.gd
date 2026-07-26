@@ -74,6 +74,8 @@ var anim_frame: int = 0
 var suction_anim_frame: int = 0
 var suction_anim_timer: float = 0.0
 const SUCTION_ANIM_SPEED := 0.03
+const SPRAY_ANIM_SPEED := 0.045
+const DUST_ANIM_SPEED := 0.045
 
 # 每个动画状态的"每帧间隔(秒)"，未列出的状态走 AnimTimer 默认 wait_time
 # walk 间隔 0.06s ≈ 16fps，比默认 0.125s/8fps 明显更快
@@ -145,8 +147,38 @@ const SUCTION_TEX_PATHS := [
 	"res://assets/sprites/ZhongKui/InhaleEffects_a/InhaleEffects_a_10.png"
 ]
 
+const DUST_TEX_PATHS := [
+	"res://assets/sprites/ZhongKui/Dust/ZhongKui_Dust_01.png",
+	"res://assets/sprites/ZhongKui/Dust/ZhongKui_Dust_02.png",
+	"res://assets/sprites/ZhongKui/Dust/ZhongKui_Dust_03.png",
+	"res://assets/sprites/ZhongKui/Dust/ZhongKui_Dust_04.png",
+	"res://assets/sprites/ZhongKui/Dust/ZhongKui_Dust_05.png",
+	"res://assets/sprites/ZhongKui/Dust/ZhongKui_Dust_06.png"
+]
+
+const SPRAY_TEX_PATHS := [
+	"res://assets/sprites/ZhongKui/Spray/ZhongKui_Spray_01.png",
+	"res://assets/sprites/ZhongKui/Spray/ZhongKui_Spray_02.png",
+	"res://assets/sprites/ZhongKui/Spray/ZhongKui_Spray_03.png",
+	"res://assets/sprites/ZhongKui/Spray/ZhongKui_Spray_04.png",
+	"res://assets/sprites/ZhongKui/Spray/ZhongKui_Spray_05.png",
+	"res://assets/sprites/ZhongKui/Spray/ZhongKui_Spray_06.png"
+]
+
 var _textures := {}
 var _suction_textures := []
+var spray_sprite: Sprite2D = null
+var _spray_textures := []
+var _spray_playing: bool = false
+var _spray_anim_frame: int = 0
+var _spray_anim_timer: float = 0.0
+var dust_sprite: Sprite2D = null
+var _dust_textures := []
+var _dust_playing: bool = false
+var _dust_anim_frame: int = 0
+var _dust_anim_timer: float = 0.0
+var _landing_dust_pending: bool = false
+var _dust_anchor_position: Vector2 = Vector2.ZERO
 
 func _ready() -> void:
 	for state in TEX_PATHS.keys():
@@ -155,6 +187,14 @@ func _ready() -> void:
 			_textures[state].append(load(path))
 	for path in SUCTION_TEX_PATHS:
 		_suction_textures.append(load(path))
+	for path in SPRAY_TEX_PATHS:
+		var spray_tex := _load_texture_with_source_fallback(path)
+		if spray_tex != null:
+			_spray_textures.append(spray_tex)
+	for path in DUST_TEX_PATHS:
+		var dust_tex := _load_texture_with_source_fallback(path)
+		if dust_tex != null:
+			_dust_textures.append(dust_tex)
 	anim_timer.timeout.connect(_on_anim_tick)
 	anim_timer.start()
 	hurt_box.body_entered.connect(_on_hurt_box_body_entered)
@@ -165,8 +205,41 @@ func _ready() -> void:
 	_setup_inhale_enter_sfx()
 	_setup_inhale_out_sfx()
 	_setup_inhale_particles()
+	_setup_spray_fx()
+	_setup_landing_dust()
 	CharTuning.tuning_changed.connect(_apply_tuning)
 	_apply_tuning()
+
+func _setup_spray_fx() -> void:
+	spray_sprite = Sprite2D.new()
+	spray_sprite.name = "SprayFx"
+	spray_sprite.visible = false
+	spray_sprite.centered = false
+	spray_sprite.z_as_relative = true
+	spray_sprite.z_index = sprite.z_index + 1
+	add_child(spray_sprite)
+	_apply_spray_tuning()
+
+func _setup_landing_dust() -> void:
+	dust_sprite = Sprite2D.new()
+	dust_sprite.name = "LandingDust"
+	dust_sprite.visible = false
+	dust_sprite.centered = false
+	dust_sprite.top_level = true
+	dust_sprite.z_as_relative = true
+	dust_sprite.z_index = sprite.z_index
+	add_child(dust_sprite)
+	move_child(dust_sprite, sprite.get_index())
+	_apply_dust_tuning()
+
+func _load_texture_with_source_fallback(path: String) -> Texture2D:
+	var tex := load(path) as Texture2D
+	if tex != null:
+		return tex
+	var image := Image.load_from_file(path)
+	if image == null or image.is_empty():
+		return null
+	return ImageTexture.create_from_image(image)
 
 func _setup_inhale_sfx() -> void:
 	inhale_sfx = AudioStreamPlayer.new()
@@ -344,7 +417,44 @@ func _apply_tuning() -> void:
 	hold_warning.offset_top = CharTuning.hold_warning_offset_y
 	hold_warning.offset_bottom = CharTuning.hold_warning_offset_y + 70.0
 	_update_facing()
+	_apply_spray_tuning()
+	_apply_dust_tuning()
 	queue_redraw()
+
+func _apply_spray_tuning() -> void:
+	if spray_sprite == null:
+		return
+	var s: float = maxf(0.01, CharTuning.spray_fx_scale)
+	spray_sprite.scale = Vector2(s, s)
+	_update_spray_transform()
+	_refresh_spray_preview_visibility()
+
+func refresh_tuning_previews() -> void:
+	_refresh_spray_preview_visibility()
+
+func _refresh_spray_preview_visibility() -> void:
+	if spray_sprite == null or _spray_playing:
+		return
+	if _is_tuning_panel_visible() and not _spray_textures.is_empty():
+		_spray_anim_frame = 0
+		spray_sprite.texture = _spray_textures[0]
+		_update_spray_transform()
+		spray_sprite.visible = true
+	else:
+		spray_sprite.visible = false
+
+func _is_tuning_panel_visible() -> bool:
+	var tuning_panel = get_tree().get_first_node_in_group("tuning_panel")
+	return tuning_panel != null and tuning_panel.visible
+
+func _apply_dust_tuning() -> void:
+	if dust_sprite == null:
+		return
+	var s: float = maxf(0.01, CharTuning.dust_fx_scale)
+	dust_sprite.scale = Vector2(s, s)
+	dust_sprite.modulate = Color(1, 1, 1, 0.7)
+	if _dust_playing:
+		_update_landing_dust_position()
 
 func _draw() -> void:
 	# Show suction area + body collision debug rects when tuning panel is open
@@ -377,6 +487,7 @@ func _physics_process(delta: float) -> void:
 		return
 	if _sync_death_sequence_with_lives():
 		return
+	var was_on_floor := is_on_floor()
 	if not is_on_floor():
 		velocity.y += GRAVITY * delta
 
@@ -391,6 +502,7 @@ func _physics_process(delta: float) -> void:
 	if Input.is_action_just_pressed("jump") and is_on_floor():
 		velocity.y = JUMP_VELOCITY
 		is_switching_platform = true
+		_landing_dust_pending = true
 
 	if Input.is_action_just_pressed("move_down"):
 		_try_drop_through_platform()
@@ -425,6 +537,10 @@ func _physics_process(delta: float) -> void:
 	move_and_slide()
 	if _death_sequence_playing:
 		return
+	var landed_this_frame := not was_on_floor and is_on_floor()
+	if landed_this_frame and _landing_dust_pending:
+		_play_landing_dust()
+		_landing_dust_pending = false
 	if is_switching_platform and is_on_floor():
 		is_switching_platform = false
 		_damage_from_overlapping_enemy()
@@ -437,6 +553,8 @@ func _physics_process(delta: float) -> void:
 	_tick_hold_timer(delta)
 	_update_animation_state()
 	_tick_custom_anim(delta)
+	_tick_spray_fx(delta)
+	_tick_landing_dust(delta)
 	_tick_invincibility(delta)
 	_update_carried_enemy_position()
 
@@ -456,6 +574,16 @@ func _update_facing() -> void:
 	suction_visual.scale = Vector2(CharTuning.inhale_fx_scale, CharTuning.inhale_fx_scale)
 	# 同步高亮粒子的位置和飞行方向
 	_update_inhale_particles_transform()
+	_update_spray_transform()
+
+func _update_spray_transform() -> void:
+	if spray_sprite == null:
+		return
+	var dir_x: float = 1.0 if facing_right else -1.0
+	spray_sprite.position = Vector2(CharTuning.spray_fx_offset_x * dir_x, CharTuning.spray_fx_offset_y)
+	spray_sprite.flip_h = not facing_right
+	if spray_sprite.texture != null:
+		spray_sprite.offset = Vector2(-spray_sprite.texture.get_width() * 0.5, -spray_sprite.texture.get_height() * 0.5)
 
 func _apply_suction(delta: float) -> void:
 	# 蓄力期间或正式吸气期间都要播放视觉特效
@@ -558,6 +686,7 @@ func _shoot_balls() -> void:
 	if ball_scene == null:
 		push_error("Failed to load ball scene for player shot.")
 		return
+	_play_spray_fx()
 	var dir_x: int = 1 if facing_right else -1
 	var capture_count: int = captured_enemies.size()
 	for i in range(captured_enemies.size()):
@@ -668,6 +797,81 @@ func _tick_custom_anim(delta: float) -> void:
 		anim_frame = (anim_frame + 1) % frames.size()
 		_apply_frame()
 
+func _play_spray_fx() -> void:
+	if spray_sprite == null or _spray_textures.is_empty():
+		return
+	_spray_playing = true
+	_spray_anim_frame = 0
+	_spray_anim_timer = 0.0
+	spray_sprite.visible = true
+	_apply_spray_tuning()
+	_apply_spray_frame()
+
+func _tick_spray_fx(delta: float) -> void:
+	if not _spray_playing or spray_sprite == null:
+		return
+	_spray_anim_timer += delta
+	while _spray_anim_timer >= SPRAY_ANIM_SPEED:
+		_spray_anim_timer -= SPRAY_ANIM_SPEED
+		_spray_anim_frame += 1
+		if _spray_anim_frame >= _spray_textures.size():
+			_spray_playing = false
+			_refresh_spray_preview_visibility()
+			return
+		_apply_spray_frame()
+
+func _apply_spray_frame() -> void:
+	if spray_sprite == null or _spray_textures.is_empty():
+		return
+	spray_sprite.texture = _spray_textures[_spray_anim_frame % _spray_textures.size()]
+	_update_spray_transform()
+
+func _play_landing_dust() -> void:
+	if dust_sprite == null or _dust_textures.is_empty():
+		return
+	_dust_playing = true
+	_dust_anim_frame = 0
+	_dust_anim_timer = 0.0
+	_dust_anchor_position = _get_foot_world_position()
+	_update_landing_dust_position()
+	dust_sprite.visible = true
+	_apply_dust_tuning()
+	_apply_dust_frame()
+
+func _tick_landing_dust(delta: float) -> void:
+	if not _dust_playing or dust_sprite == null:
+		return
+	_dust_anim_timer += delta
+	while _dust_anim_timer >= DUST_ANIM_SPEED:
+		_dust_anim_timer -= DUST_ANIM_SPEED
+		_dust_anim_frame += 1
+		if _dust_anim_frame >= _dust_textures.size():
+			_dust_playing = false
+			dust_sprite.visible = false
+			return
+		_apply_dust_frame()
+
+func _apply_dust_frame() -> void:
+	if dust_sprite == null or _dust_textures.is_empty():
+		return
+	var tex := _dust_textures[_dust_anim_frame % _dust_textures.size()] as Texture2D
+	dust_sprite.texture = tex
+	dust_sprite.offset = Vector2(-tex.get_width() * 0.5, -tex.get_height())
+
+func _update_landing_dust_position() -> void:
+	if dust_sprite == null:
+		return
+	dust_sprite.global_position = _dust_anchor_position + Vector2(
+		CharTuning.dust_fx_offset_x,
+		CharTuning.dust_fx_offset_y
+	)
+
+func _get_foot_world_position() -> Vector2:
+	var foot_offset_y: float = CharTuning.body_offset_y + CharTuning.body_height * 0.5
+	if collision != null and collision.shape is RectangleShape2D:
+		foot_offset_y = collision.position.y + (collision.shape as RectangleShape2D).size.y * 0.5
+	return global_position + Vector2(0.0, foot_offset_y)
+
 func _apply_frame() -> void:
 	var frames = _textures.get(anim_state, [])
 	if frames.is_empty():
@@ -772,6 +976,13 @@ func _respawn() -> void:
 		return
 	if _sync_death_sequence_with_lives():
 		return
+	_landing_dust_pending = false
+	_dust_playing = false
+	if dust_sprite != null:
+		dust_sprite.visible = false
+	_spray_playing = false
+	if spray_sprite != null:
+		spray_sprite.visible = false
 	var level := _get_level()
 	if level != null and level.has_method("get_spawn_pos"):
 		position = level.get_spawn_pos()
@@ -815,6 +1026,13 @@ func _play_death_sequence() -> void:
 	vacuum_charge_timer = 0.0
 	vacuum_armed = false
 	_shoot_when_capture_ready = false
+	_landing_dust_pending = false
+	_dust_playing = false
+	if dust_sprite != null:
+		dust_sprite.visible = false
+	_spray_playing = false
+	if spray_sprite != null:
+		spray_sprite.visible = false
 	hold_warning.visible = false
 	suction_visual.visible = false
 	suction_area.monitoring = false
@@ -873,6 +1091,7 @@ func _start_drop_through_platform() -> void:
 	position.y += DROP_THROUGH_DISTANCE
 	velocity.y = DROP_THROUGH_VELOCITY
 	is_switching_platform = true
+	_landing_dust_pending = true
 
 func _is_one_way_tile_collision(c: KinematicCollision2D) -> bool:
 	var collider = c.get_collider()

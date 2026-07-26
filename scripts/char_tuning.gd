@@ -37,6 +37,12 @@ var hold_warning_offset_y: float = -136.0
 var inhale_fx_scale: float = 0.71
 var inhale_fx_offset_x: float = 70.0
 var inhale_fx_offset_y: float = -12.0
+var spray_fx_scale: float = 1.0
+var spray_fx_offset_x: float = 94.0
+var spray_fx_offset_y: float = -12.0
+var dust_fx_scale: float = 1.0
+var dust_fx_offset_x: float = 0.0
+var dust_fx_offset_y: float = 0.0
 var mh_sprite_scale: float = 0.46
 var mh_sprite_offset_x: float = 17.0
 var mh_sprite_offset_y: float = -129.0
@@ -253,6 +259,12 @@ func load_config() -> void:
 		inhale_fx_scale      = cfg.get_value("char", "inhale_fx_scale", inhale_fx_scale)
 		inhale_fx_offset_x   = cfg.get_value("char", "inhale_fx_offset_x", inhale_fx_offset_x)
 		inhale_fx_offset_y   = cfg.get_value("char", "inhale_fx_offset_y", inhale_fx_offset_y)
+		spray_fx_scale       = cfg.get_value("char", "spray_fx_scale", spray_fx_scale)
+		spray_fx_offset_x    = cfg.get_value("char", "spray_fx_offset_x", spray_fx_offset_x)
+		spray_fx_offset_y    = cfg.get_value("char", "spray_fx_offset_y", spray_fx_offset_y)
+		dust_fx_scale        = cfg.get_value("char", "dust_fx_scale", dust_fx_scale)
+		dust_fx_offset_x     = cfg.get_value("char", "dust_fx_offset_x", dust_fx_offset_x)
+		dust_fx_offset_y     = cfg.get_value("char", "dust_fx_offset_y", dust_fx_offset_y)
 		vanish_point_offset_x = cfg.get_value("char", "vanish_point_offset_x", vanish_point_offset_x)
 		vanish_point_offset_y = cfg.get_value("char", "vanish_point_offset_y", vanish_point_offset_y)
 	ball_sprite_scale    = cfg.get_value("ball", "ball_sprite_scale", ball_sprite_scale)
@@ -409,6 +421,12 @@ func save_config() -> void:
 	cfg.set_value("char", "inhale_fx_scale", inhale_fx_scale)
 	cfg.set_value("char", "inhale_fx_offset_x", inhale_fx_offset_x)
 	cfg.set_value("char", "inhale_fx_offset_y", inhale_fx_offset_y)
+	cfg.set_value("char", "spray_fx_scale", spray_fx_scale)
+	cfg.set_value("char", "spray_fx_offset_x", spray_fx_offset_x)
+	cfg.set_value("char", "spray_fx_offset_y", spray_fx_offset_y)
+	cfg.set_value("char", "dust_fx_scale", dust_fx_scale)
+	cfg.set_value("char", "dust_fx_offset_x", dust_fx_offset_x)
+	cfg.set_value("char", "dust_fx_offset_y", dust_fx_offset_y)
 	cfg.set_value("enemy", "mh_sprite_scale", mh_sprite_scale)
 	cfg.set_value("enemy", "mh_sprite_offset_x", mh_sprite_offset_x)
 	cfg.set_value("enemy", "mh_sprite_offset_y", mh_sprite_offset_y)

@@ -30,6 +30,8 @@ func _input(event: InputEvent) -> void:
 			var player = get_tree().get_first_node_in_group("player")
 			if player != null:
 				player.queue_redraw()
+				if player.has_method("refresh_tuning_previews"):
+					player.refresh_tuning_previews()
 			for marker in get_tree().get_nodes_in_group("vanish_marker"):
 				marker.queue_redraw()
 			for marker in get_tree().get_nodes_in_group("shell_explode_marker"):
@@ -140,6 +142,26 @@ func _build_ui() -> void:
 	_add_row("FX Offset X",     "inhale_fx_offset_x", -400, 400,  2.0)
 	_add_row("FX Offset Y",     "inhale_fx_offset_y", -200, 200,  2.0)
 	_add_row("FX Scale",        "inhale_fx_scale",     0.1,  3.0,  0.01)
+	_vbox.add_child(HSeparator.new())
+
+	var title_spray_fx := Label.new()
+	title_spray_fx.text = "▼ 喷出烟雾 (序列帧)"
+	title_spray_fx.add_theme_font_size_override("font_size", 22)
+	title_spray_fx.add_theme_color_override("font_color", Color(0.85, 0.85, 0.9, 1))
+	_vbox.add_child(title_spray_fx)
+	_add_row("喷雾大小/缩放", "spray_fx_scale", 0.05, 4.0, 0.01)
+	_add_row("喷雾位置 X", "spray_fx_offset_x", -300, 300, 1.0)
+	_add_row("喷雾位置 Y", "spray_fx_offset_y", -200, 200, 1.0)
+	_vbox.add_child(HSeparator.new())
+
+	var title_dust_fx := Label.new()
+	title_dust_fx.text = "▼ 跳跃落地灰尘 (序列帧)"
+	title_dust_fx.add_theme_font_size_override("font_size", 22)
+	title_dust_fx.add_theme_color_override("font_color", Color(0.65, 0.65, 0.6, 1))
+	_vbox.add_child(title_dust_fx)
+	_add_row("灰尘大小/缩放", "dust_fx_scale", 0.05, 4.0, 0.01)
+	_add_row("灰尘位置 X", "dust_fx_offset_x", -300, 300, 1.0)
+	_add_row("灰尘位置 Y", "dust_fx_offset_y", -200, 200, 1.0)
 	_vbox.add_child(HSeparator.new())
 
 	var title_enemy := Label.new()
@@ -637,6 +659,12 @@ func _reset_defaults() -> void:
 	CharTuning.inhale_fx_scale = 1.0
 	CharTuning.inhale_fx_offset_x = 0.0
 	CharTuning.inhale_fx_offset_y = 0.0
+	CharTuning.spray_fx_scale = 1.0
+	CharTuning.spray_fx_offset_x = 94.0
+	CharTuning.spray_fx_offset_y = -12.0
+	CharTuning.dust_fx_scale = 1.0
+	CharTuning.dust_fx_offset_x = 0.0
+	CharTuning.dust_fx_offset_y = 0.0
 	CharTuning.drop_yuanbao_offset_x = 0.0
 	CharTuning.drop_yuanbao_offset_y = 0.0
 	CharTuning.drop_yuanbao_scale = 0.40
