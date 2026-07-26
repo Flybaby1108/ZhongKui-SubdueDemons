@@ -137,3 +137,9 @@ jobs:
       - name: Deploy
         id: deployment
         uses: actions/deploy-pages@v4
+        with:
+          # Godot web artifacts can take longer than the default 10 minutes to
+          # finalize on Pages when GitHub is slow. Keep waiting instead of
+          # failing a completed build during the deploy poll.
+          timeout: 1200000
+          reporting_interval: 10000
