@@ -3,7 +3,7 @@ extends Node
 const CONFIG_PATH := "user://char_tuning.cfg"
 # Browser builds keep user:// across GitHub Pages deployments. Increment this
 # whenever baked enemy calibration must replace previously saved Web values.
-const ENEMY_TUNING_VERSION := 2
+const ENEMY_TUNING_VERSION := 3
 const FDK_MECHANISM_TUNING_VERSION := 5
 const FDK_HUD_TUNING_VERSION := 2
 # 钟馗本体（char 段）与通用 HUD（ui 段：红心/头像/铜钱/元宝/倒计时/标题）以前未做版本门控，
@@ -37,45 +37,45 @@ var hold_warning_offset_y: float = -136.0
 var inhale_fx_scale: float = 0.71
 var inhale_fx_offset_x: float = 70.0
 var inhale_fx_offset_y: float = -12.0
-var mh_sprite_scale: float = 0.45
+var mh_sprite_scale: float = 0.46
 var mh_sprite_offset_x: float = 17.0
-var mh_sprite_offset_y: float = -127.0
-var mh_col_offset_x: float = 12.0
-var mh_col_offset_y: float = -70.0
-var mh_col_width: float = 70.0
+var mh_sprite_offset_y: float = -129.0
+var mh_col_offset_x: float = 8.0
+var mh_col_offset_y: float = -68.0
+var mh_col_width: float = 68.0
 var mh_col_height: float = 126.0
-var rg_sprite_scale: float = 0.29
-var rg_sprite_offset_y: float = -170.0
-var rg_col_offset_x: float = -9.0
-var rg_col_offset_y: float = -170.0
+var rg_sprite_scale: float = 0.28
+var rg_sprite_offset_y: float = -193.0
+var rg_col_offset_x: float = -12.0
+var rg_col_offset_y: float = -171.0
 var rg_col_width: float = 68.0
 var rg_col_height: float = 114.0
-var rd_sprite_scale: float = 0.45
-var rd_sprite_offset_y: float = -132.0
+var rd_sprite_scale: float = 0.44
+var rd_sprite_offset_y: float = -119.0
 var rd_col_offset_x: float = 25.0
-var rd_col_offset_y: float = -86.0
-var rd_col_width: float = 130.0
-var rd_col_height: float = 176.0
+var rd_col_offset_y: float = -84.0
+var rd_col_width: float = 126.0
+var rd_col_height: float = 178.0
 var pz_sprite_scale: float = 0.32
 var pz_sprite_offset_y: float = -52.0
 var pz_col_offset_x: float = 12.0
 var pz_col_offset_y: float = -34.0
 var pz_col_width: float = 62.0
 var pz_col_height: float = 118.0
-var fdk_sprite_scale: float = 0.84
+var fdk_sprite_scale: float = 0.82
 var fdk_sprite_offset_x: float = -17.0
-var fdk_sprite_offset_y: float = -77.0
+var fdk_sprite_offset_y: float = -58.0
 var fdk_col_offset_x: float = 12.0
-var fdk_col_offset_y: float = 26.0
-var fdk_col_width: float = 254.0
+var fdk_col_offset_y: float = 25.0
+var fdk_col_width: float = 252.0
 var fdk_col_height: float = 174.0
 var fdk_col_scale: float = 1.28
 var fdk_mechanism_pos_x: float = 262.0
 var fdk_mechanism_pos_y: float = -516.0
-var fdk_mechanism_scale: float = 0.5
+var fdk_mechanism_scale: float = 0.49
 var fdk_mechanism_pivot_x: float = 400.0
 var fdk_mechanism_pivot_y: float = -524.0
-var fdk_mechanism_rotation: float = -51.0
+var fdk_mechanism_rotation: float = -52.0
 # 滚动铁球（FatDemonKing Attack1 放出的会滚动的铁球）的可调参数：
 # - fdk_ball_scale       铁球美术资源缩放（视觉大小）
 # - fdk_ball_track_offset_y 铁球在三层平台上滚动时的美术 Y 偏移（修正铁球陷进/浮在平台的视觉）
@@ -83,11 +83,11 @@ var fdk_mechanism_rotation: float = -51.0
 # - fdk_ball_roll_speed  铁球沿轨道的水平滚动移动速度（像素/秒）
 # - fdk_ball_rest_offset_x/y 平行(静止)状态下铁球相对机关平台的初始位置 XY 偏移
 var fdk_ball_scale: float = 1.0
-var fdk_ball_rest_offset_x: float = 144.0
+var fdk_ball_rest_offset_x: float = 143.0
 var fdk_ball_rest_offset_y: float = -87.0
 var fdk_ball_track_offset_y: float = -72.0
-var fdk_ball_spin_speed: float = 0.55
-var fdk_ball_roll_speed: float = 260.0
+var fdk_ball_spin_speed: float = 0.5
+var fdk_ball_roll_speed: float = 255.0
 # 炮弹（FatDemonKing Attack2 落下的炮弹）落在平台上消失/爆炸的高度微调与爆炸大小：
 # - shell_firecracker_scale  爆竹本体美术资源缩放
 # - shell_explode_offset_y     炮弹在平台站立面 Y 基础上的额外偏移（负值=更高处提前消失爆炸，正值=更靠下）；影响爆炸触发判定高度
@@ -96,7 +96,7 @@ var fdk_ball_roll_speed: float = 260.0
 var shell_firecracker_scale: float = 1.06
 var shell_explode_offset_y: float = -44.0
 var shell_explode_scale: float = 1.27
-var shell_explode_art_offset_y: float = -94.0
+var shell_explode_art_offset_y: float = -95.0
 # Boss（ChapterBoss 关卡的关底大怪）：当前只接入 sprite 缩放 + 位置偏移，
 # 没有碰撞调参（Boss 不参与玩家碰撞/吸入流程，加碰撞之后再补 col_* 字段）。
 # 默认 scale 0.4 是个先验估值；策划用 F1 调好后这里 baked 成新默认。
@@ -107,15 +107,15 @@ var boss_sprite_offset_y: float = -84.0
 # 相对 Boss 节点局部坐标。X/Y 是矩形中心偏移；Width/Height 是矩形尺寸（受 hurt_scale 整体缩放）。
 # 调试可视化：F1 面板可见时，Boss 上会画一个紫色半透明矩形显示当前范围。
 var boss_hurt_offset_x: float = -217.0
-var boss_hurt_offset_y: float = -7.0
+var boss_hurt_offset_y: float = -8.0
 var boss_hurt_width: float = 292.0
 var boss_hurt_height: float = 474.0
-var boss_hurt_scale: float = 1.68
+var boss_hurt_scale: float = 1.67
 # Boss Attack2 释放 FireSkull 时的"左手法器圆环"偏移（相对 Boss 全局位置，单位像素）。
 # Boss 当前默认面朝左侧（朝玩家）；左手在角色身体左侧——画面上仍是 -X 方向。
 # 默认值是策划/美术的先验估值，需要在 F1 面板里实际跑动后微调。
 var boss_skull_spawn_offset_x: float = 224.0
-var boss_skull_spawn_offset_y: float = -166.0
+var boss_skull_spawn_offset_y: float = -169.0
 # FireSkull sprite 视觉缩放（飞行 + 喷出 ball 形态共用）。
 # PNG 原图较大，0.18 是策划先验估值；F1 面板可实时调整。
 var boss_skull_scale: float = 0.57
@@ -198,7 +198,7 @@ var vanish_point_offset_y: float = -11.0
 # 攻击距离由 scale 决定：实际伸出距离 = 1733 × scale - mh_hammer_anchor_padding
 # - 当前 scale 0.155 → 实际伸出 ≈ 268px
 # - 提高 scale → 锤变大 + 链变长（攻击距离同步扩大）
-var mh_hammer_scale: float = 0.245         # 锤 sprite 缩放（PNG 1733×200）
+var mh_hammer_scale: float = 0.24          # 锤 sprite 缩放（PNG 1733×200）
 var mh_hammer_offset_x: float = 50.0       # 锤"手部锚点"位置（怪面向方向上距怪中心的 X）
 var mh_hammer_offset_y: float = -109.0     # 锤"手部锚点"位置 Y（负值偏上）
 # 锤头碰撞盒尺寸（按 scale 自动缩放；指的是 1733×200 贴图中锤头部分的像素尺寸）
