@@ -1835,10 +1835,9 @@ func _release_fdk_iron_ball() -> void:
 # 构建三层滚动路径：机关左侧斜面滑下 → 上层平台(向左滚至左端终点) → 中层平台(向右滚至右端终点)
 # → 下层地面(向左滚出画面)。所有坐标取自 Stage3 关卡几何，铁球匀速滚动。
 func _build_fdk_track(spawn_pos: Vector2) -> Array:
-	var radius := IronBall.COLLISION_SIZE * IronBall.BALL_SCALE * 0.5
-	var upper_y := FDK_TRACK_UPPER_Y - radius
-	var middle_y := FDK_TRACK_MIDDLE_Y - radius
-	var ground_y := FDK_TRACK_GROUND_Y - radius
+	var upper_y := _get_fdk_iron_ball_track_y(FDK_TRACK_UPPER_Y)
+	var middle_y := _get_fdk_iron_ball_track_y(FDK_TRACK_MIDDLE_Y)
+	var ground_y := _get_fdk_iron_ball_track_y(FDK_TRACK_GROUND_Y)
 	# 着陆点位于机关左下方：从 spawn X 向左偏移，并钳制在上层平台有效区间内。
 	var landing_x: float = clampf(
 		spawn_pos.x + FDK_TRACK_UPPER_LANDING_DX,
@@ -1854,6 +1853,14 @@ func _build_fdk_track(spawn_pos: Vector2) -> Array:
 	points.append(Vector2(FDK_TRACK_MIDDLE_RIGHT_X, ground_y))        # 从中层终点掉到下层地面
 	points.append(Vector2(FDK_TRACK_GROUND_EXIT_X, ground_y))         # 下层地面向左滚出画面
 	return points
+
+func _get_fdk_iron_ball_track_y(surface_y: float) -> float:
+	var ball_scale: float = maxf(0.01, CharTuning.fdk_ball_scale)
+	var visual_radius := IronBall.COLLISION_SIZE * 0.5 * ball_scale
+	var tex := _load_fdk_iron_ball_texture()
+	if tex != null:
+		visual_radius = tex.get_height() * 0.5 * ball_scale
+	return surface_y - CharTuning.fdk_ball_track_offset_y - visual_radius
 
 func _restore_fdk_rest_ball() -> void:
 	if _fdk_mechanism == null or not is_instance_valid(_fdk_mechanism):

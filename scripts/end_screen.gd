@@ -4,6 +4,12 @@ extends Control
 
 const END_EFFECT_PATH := "res://assets/audio/EndEffect.mp3"
 const GAME_OVER_SFX_PATH := "res://assets/audio/GameOver.mp3"
+const FAIL_BACKGROUND_PATH := "res://assets/sprites/Fail/Fail_Background.jpg"
+const FAIL_WORD_PATH := "res://assets/sprites/Fail/Fail_Word.png"
+const FAIL_WORD_DELAY_TIME := 1.0
+const FAIL_WORD_FADE_IN_TIME := 2.0
+const FAIL_AUTO_BLACK_TIME := 4.0
+const FAIL_BLACK_FADE_OUT_TIME := 1.0
 const BRIBERY_IMAGE_PATH := "res://assets/sprites/bribery/Bribery.jpg"
 const BRIBERY_TEXT_PATH := "res://assets/sprites/bribery/Bribery_Text.png"
 const BRIBERY_FADE_IN_TIME := 1.0
@@ -14,12 +20,20 @@ const BRIBERY_TEXT_FADE_IN_TIME := 2.0
 @onready var hint_label: Label = $Center/Hint
 
 var _end_effect_player: AudioStreamPlayer = null
+var _fail_background: TextureRect = null
+var _fail_word_image: TextureRect = null
+var _fail_black_overlay: ColorRect = null
+var _fail_sequence_tween: Tween = null
+var _fail_word_tween: Tween = null
+var _fail_black_tween: Tween = null
 var _bribery_background: TextureRect = null
 var _bribery_title_image: TextureRect = null
 var _bribery_fade_overlay: ColorRect = null
 var _bribery_fade_tween: Tween = null
 var _bribery_title_tween: Tween = null
+var _showing_fail_screen: bool = false
 var _showing_bribery_offer: bool = false
+var _returning_to_menu: bool = false
 
 func _ready() -> void:
 	if not is_victory and GameState.can_revive_from_game_over():
@@ -33,6 +47,7 @@ func _ready() -> void:
 
 	# GAME OVER 界面播放失败音效，胜利界面播放结算音乐
 	if not is_victory:
+		_setup_fail_screen()
 		var go_stream := load(GAME_OVER_SFX_PATH) as AudioStream
 		if go_stream == null:
 			push_warning("GameOver.mp3 not found: %s" % GAME_OVER_SFX_PATH)
@@ -69,6 +84,14 @@ func _input(event: InputEvent) -> void:
 			GameState.goto_main_menu()
 		return
 
+	if _showing_fail_screen:
+		if event.is_action_pressed("ui_accept") or event.is_action_pressed("ui_cancel") or _is_escape_pressed(event):
+			get_viewport().set_input_as_handled()
+			Input.action_release("ui_accept")
+			Input.action_release("ui_cancel")
+			_return_to_main_menu_from_fail()
+		return
+
 	if event.is_action_pressed("vacuum") or event.is_action_pressed("ui_accept"):
 		get_viewport().set_input_as_handled()
 		Input.action_release("vacuum")
@@ -76,6 +99,88 @@ func _input(event: InputEvent) -> void:
 		if not is_victory and GameState.revive_from_game_over():
 			return
 		GameState.goto_main_menu()
+
+func _setup_fail_screen() -> void:
+	_showing_fail_screen = true
+	var center := $Center as VBoxContainer
+	center.visible = false
+
+	_fail_background = TextureRect.new()
+	_fail_background.name = "FailBackground"
+	_fail_background.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_fail_background.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	_fail_background.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+	_fail_background.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var background_texture := load(FAIL_BACKGROUND_PATH) as Texture2D
+	if background_texture != null:
+		_fail_background.texture = background_texture
+	else:
+		push_warning("Fail background not found: %s" % FAIL_BACKGROUND_PATH)
+	add_child(_fail_background)
+	move_child(_fail_background, 0)
+
+	_fail_word_image = TextureRect.new()
+	_fail_word_image.name = "FailWord"
+	_fail_word_image.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	_fail_word_image.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	_fail_word_image.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_fail_word_image.modulate.a = 0.0
+	var word_texture := load(FAIL_WORD_PATH) as Texture2D
+	if word_texture != null:
+		_fail_word_image.texture = word_texture
+	else:
+		push_warning("Fail word image not found: %s" % FAIL_WORD_PATH)
+	add_child(_fail_word_image)
+	move_child(_fail_word_image, 1)
+	_apply_fail_word_tuning()
+	if not CharTuning.tuning_changed.is_connected(_apply_fail_word_tuning):
+		CharTuning.tuning_changed.connect(_apply_fail_word_tuning)
+
+	_start_fail_sequence()
+
+func _start_fail_sequence() -> void:
+	if _fail_sequence_tween != null and _fail_sequence_tween.is_valid():
+		_fail_sequence_tween.kill()
+	_fail_sequence_tween = create_tween()
+	_fail_sequence_tween.tween_interval(FAIL_WORD_DELAY_TIME)
+	_fail_sequence_tween.tween_callback(_start_fail_word_fade_in)
+	_fail_sequence_tween.tween_interval(max(0.0, FAIL_AUTO_BLACK_TIME - FAIL_WORD_DELAY_TIME))
+	_fail_sequence_tween.tween_callback(_start_fail_black_fade_out)
+
+func _start_fail_word_fade_in() -> void:
+	if _returning_to_menu or not is_instance_valid(_fail_word_image):
+		return
+	if _fail_word_tween != null and _fail_word_tween.is_valid():
+		_fail_word_tween.kill()
+	_fail_word_image.modulate.a = 0.0
+	_fail_word_tween = create_tween()
+	_fail_word_tween.set_trans(Tween.TRANS_SINE)
+	_fail_word_tween.set_ease(Tween.EASE_OUT)
+	_fail_word_tween.tween_property(_fail_word_image, "modulate:a", 1.0, FAIL_WORD_FADE_IN_TIME)
+
+func _start_fail_black_fade_out() -> void:
+	if _returning_to_menu:
+		return
+	_fail_black_overlay = ColorRect.new()
+	_fail_black_overlay.name = "FailBlackOverlay"
+	_fail_black_overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_fail_black_overlay.color = Color.BLACK
+	_fail_black_overlay.modulate.a = 0.0
+	_fail_black_overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(_fail_black_overlay)
+	move_child(_fail_black_overlay, get_child_count() - 1)
+
+	_fail_black_tween = create_tween()
+	_fail_black_tween.set_trans(Tween.TRANS_SINE)
+	_fail_black_tween.set_ease(Tween.EASE_IN_OUT)
+	_fail_black_tween.tween_property(_fail_black_overlay, "modulate:a", 1.0, FAIL_BLACK_FADE_OUT_TIME)
+	_fail_black_tween.tween_callback(_return_to_main_menu_from_fail)
+
+func _return_to_main_menu_from_fail() -> void:
+	if _returning_to_menu:
+		return
+	_returning_to_menu = true
+	GameState.goto_main_menu()
 
 func _setup_bribery_offer() -> void:
 	_bribery_background = TextureRect.new()
@@ -163,6 +268,21 @@ func _show_bribery_prompt() -> void:
 		hint_label.visible = true
 	_bribery_title_tween = null
 
+func _apply_fail_word_tuning() -> void:
+	if not is_instance_valid(_fail_word_image):
+		return
+	var word_texture := _fail_word_image.texture
+	var base_size := Vector2(875.0, 699.0)
+	if word_texture != null:
+		base_size = word_texture.get_size()
+	var word_scale: float = max(0.01, CharTuning.fail_word_scale)
+	_fail_word_image.position = Vector2(
+		CharTuning.fail_word_pos_x,
+		CharTuning.fail_word_pos_y
+	)
+	_fail_word_image.custom_minimum_size = base_size * word_scale
+	_fail_word_image.size = _fail_word_image.custom_minimum_size
+
 func _apply_bribery_title_tuning() -> void:
 	if not is_instance_valid(_bribery_title_image):
 		return
@@ -229,6 +349,26 @@ func _exit_tree() -> void:
 		_end_effect_player.stream = null
 		_end_effect_player.free()
 	_end_effect_player = null
+	if is_instance_valid(_fail_background):
+		_fail_background.texture = null
+	_fail_background = null
+	if is_instance_valid(_fail_word_image):
+		_fail_word_image.texture = null
+	_fail_word_image = null
+	if is_instance_valid(_fail_black_overlay):
+		_fail_black_overlay.queue_free()
+	_fail_black_overlay = null
+	if _fail_sequence_tween != null and _fail_sequence_tween.is_valid():
+		_fail_sequence_tween.kill()
+	_fail_sequence_tween = null
+	if _fail_word_tween != null and _fail_word_tween.is_valid():
+		_fail_word_tween.kill()
+	_fail_word_tween = null
+	if _fail_black_tween != null and _fail_black_tween.is_valid():
+		_fail_black_tween.kill()
+	_fail_black_tween = null
+	if CharTuning.tuning_changed.is_connected(_apply_fail_word_tuning):
+		CharTuning.tuning_changed.disconnect(_apply_fail_word_tuning)
 	if is_instance_valid(_bribery_background):
 		_bribery_background.texture = null
 	_bribery_background = null

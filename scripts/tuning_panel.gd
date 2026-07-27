@@ -339,6 +339,16 @@ func _build_ui() -> void:
 	_add_row("复活标题大小", "bribery_title_scale", 0.1, 3.0, 0.02)
 	_vbox.add_child(HSeparator.new())
 
+	var title_fail := Label.new()
+	title_fail.text = "▼ 失败标题 (Fail_Word)"
+	title_fail.add_theme_font_size_override("font_size", 22)
+	title_fail.add_theme_color_override("font_color", Color(0.95, 0.25, 0.25, 1))
+	_vbox.add_child(title_fail)
+	_add_row("失败标题位置 X", "fail_word_pos_x", -400, 1920, 2.0)
+	_add_row("失败标题位置 Y", "fail_word_pos_y", -400, 1080, 2.0)
+	_add_row("失败标题大小", "fail_word_scale", 0.1, 3.0, 0.02)
+	_vbox.add_child(HSeparator.new())
+
 	var title_bribery_prompt := Label.new()
 	title_bribery_prompt.text = "▼ 复活支付文字"
 	title_bribery_prompt.add_theme_font_size_override("font_size", 22)
@@ -462,6 +472,7 @@ func _add_row(label_text: String, prop: String, min_v: float, max_v: float, step
 	slider.max_value = max_v
 	slider.step = step
 	slider.value = CharTuning.get(prop)
+	slider.scrollable = false
 	hbox.add_child(slider)
 
 	# 数值显示 + 手动输入：value_holder 同时塞入 Label（默认可见）和 LineEdit（默认隐藏）
@@ -669,30 +680,30 @@ func _reset_defaults() -> void:
 	CharTuning.drop_yuanbao_offset_y = 0.0
 	CharTuning.drop_yuanbao_scale = 0.40
 	CharTuning.drop_yuanbao_fall_half_height = 35.0
-	CharTuning.fdk_sprite_scale = 0.42
-	CharTuning.fdk_sprite_offset_x = 0.0
-	CharTuning.fdk_sprite_offset_y = -166.0
-	CharTuning.fdk_col_offset_x = 18.0
-	CharTuning.fdk_col_offset_y = -108.0
-	CharTuning.fdk_col_width = 138.0
-	CharTuning.fdk_col_height = 204.0
-	CharTuning.fdk_col_scale = 1.0
-	CharTuning.fdk_mechanism_pos_x = 0.0
-	CharTuning.fdk_mechanism_pos_y = 0.0
-	CharTuning.fdk_mechanism_scale = 1.0
-	CharTuning.fdk_mechanism_pivot_x = 0.0
-	CharTuning.fdk_mechanism_pivot_y = 0.0
-	CharTuning.fdk_mechanism_rotation = 0.0
-	CharTuning.fdk_ball_scale = 0.55
-	CharTuning.fdk_ball_rest_offset_x = 0.0
-	CharTuning.fdk_ball_rest_offset_y = 0.0
-	CharTuning.fdk_ball_track_offset_y = 0.0
-	CharTuning.fdk_ball_spin_speed = 1.0
-	CharTuning.fdk_ball_roll_speed = 260.0
-	CharTuning.shell_firecracker_scale = 0.6
-	CharTuning.shell_explode_offset_y = 0.0
-	CharTuning.shell_explode_scale = 0.6
-	CharTuning.shell_explode_art_offset_y = 0.0
+	CharTuning.fdk_sprite_scale = 0.82
+	CharTuning.fdk_sprite_offset_x = -17.0
+	CharTuning.fdk_sprite_offset_y = -58.0
+	CharTuning.fdk_col_offset_x = 12.0
+	CharTuning.fdk_col_offset_y = 25.0
+	CharTuning.fdk_col_width = 252.0
+	CharTuning.fdk_col_height = 174.0
+	CharTuning.fdk_col_scale = 1.28
+	CharTuning.fdk_mechanism_pos_x = 262.0
+	CharTuning.fdk_mechanism_pos_y = -516.0
+	CharTuning.fdk_mechanism_scale = 0.49
+	CharTuning.fdk_mechanism_pivot_x = 400.0
+	CharTuning.fdk_mechanism_pivot_y = -524.0
+	CharTuning.fdk_mechanism_rotation = -52.0
+	CharTuning.fdk_ball_scale = 1.0
+	CharTuning.fdk_ball_rest_offset_x = 143.0
+	CharTuning.fdk_ball_rest_offset_y = -87.0
+	CharTuning.fdk_ball_track_offset_y = -72.0
+	CharTuning.fdk_ball_spin_speed = 0.5
+	CharTuning.fdk_ball_roll_speed = 255.0
+	CharTuning.shell_firecracker_scale = 1.06
+	CharTuning.shell_explode_offset_y = -44.0
+	CharTuning.shell_explode_scale = 1.27
+	CharTuning.shell_explode_art_offset_y = -95.0
 	CharTuning.boss_ghost_fire_scale = 0.58
 	CharTuning.boss_ghost_fire_offset_x = 0.0
 	CharTuning.boss_ghost_fire_offset_y = 24.0
@@ -703,19 +714,19 @@ func _reset_defaults() -> void:
 	CharTuning.avatar_frame_pos_x = 26.0
 	CharTuning.avatar_frame_pos_y = 11.0
 	CharTuning.avatar_frame_scale = 0.37
-	CharTuning.fdk_avatar_frame_pos_x = 1772.0
-	CharTuning.fdk_avatar_frame_pos_y = 94.0
-	CharTuning.fdk_avatar_frame_scale = 0.5
-	CharTuning.fdk_health_bar_pos_x = 1668.0
-	CharTuning.fdk_health_bar_pos_y = 136.0
-	CharTuning.fdk_health_bar_width = 92.0
-	CharTuning.fdk_health_bar_height = 24.0
-	CharTuning.boss_avatar_frame_pos_x = 1772.0
-	CharTuning.boss_avatar_frame_pos_y = 76.0
-	CharTuning.boss_avatar_frame_scale = 0.125
-	CharTuning.boss_health_bar_pos_x = 1508.0
-	CharTuning.boss_health_bar_pos_y = 128.0
-	CharTuning.boss_health_bar_width = 232.0
+	CharTuning.fdk_avatar_frame_pos_x = 1799.0
+	CharTuning.fdk_avatar_frame_pos_y = 11.0
+	CharTuning.fdk_avatar_frame_scale = 0.37
+	CharTuning.fdk_health_bar_pos_x = 1501.0
+	CharTuning.fdk_health_bar_pos_y = 48.0
+	CharTuning.fdk_health_bar_width = 274.0
+	CharTuning.fdk_health_bar_height = 20.0
+	CharTuning.boss_avatar_frame_pos_x = 1792.0
+	CharTuning.boss_avatar_frame_pos_y = 11.0
+	CharTuning.boss_avatar_frame_scale = 0.1
+	CharTuning.boss_health_bar_pos_x = 1349.0
+	CharTuning.boss_health_bar_pos_y = 48.0
+	CharTuning.boss_health_bar_width = 419.0
 	CharTuning.boss_health_bar_height = 28.0
 	CharTuning.coin_icon_pos_x = -363.0
 	CharTuning.coin_icon_pos_y = 17.0
@@ -738,6 +749,9 @@ func _reset_defaults() -> void:
 	CharTuning.bribery_title_pos_x = 1380.0
 	CharTuning.bribery_title_pos_y = 110.0
 	CharTuning.bribery_title_scale = 1.14
+	CharTuning.fail_word_pos_x = 522.5
+	CharTuning.fail_word_pos_y = 190.5
+	CharTuning.fail_word_scale = 1.0
 	CharTuning.bribery_prompt_pos_x = 660.0
 	CharTuning.bribery_prompt_pos_y = 38.0
 	CharTuning.bribery_prompt_font_size = 34.0

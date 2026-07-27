@@ -3,15 +3,17 @@ extends Node
 const CONFIG_PATH := "user://char_tuning.cfg"
 # Browser builds keep user:// across GitHub Pages deployments. Increment this
 # whenever baked enemy calibration must replace previously saved Web values.
-const ENEMY_TUNING_VERSION := 3
-const FDK_MECHANISM_TUNING_VERSION := 5
-const FDK_HUD_TUNING_VERSION := 2
+const ENEMY_TUNING_VERSION := 4
+const FDK_MECHANISM_TUNING_VERSION := 6
+const FDK_HUD_TUNING_VERSION := 4
+const BOSS_HUD_TUNING_VERSION := 1
 # 钟馗本体（char 段）与通用 HUD（ui 段：红心/头像/铜钱/元宝/倒计时/标题）以前未做版本门控，
 # 导致 Web 版玩家旧的 user:// 存档会一直覆盖出厂校准。新增版本号后，旧存档会被自动丢弃并
 # 用最新 baked 默认值重写。出厂校准变更时必须递增对应版本号。
 const CHAR_TUNING_VERSION := 1
 const UI_TUNING_VERSION := 1
 const BRIBERY_UI_TUNING_VERSION := 1
+const FAIL_UI_TUNING_VERSION := 1
 
 signal tuning_changed
 
@@ -148,6 +150,10 @@ var bribery_title_scale: float = 1.14
 var bribery_prompt_pos_x: float = 660.0
 var bribery_prompt_pos_y: float = 38.0
 var bribery_prompt_font_size: float = 34.0
+# 失败界面标题图（Fail_Word.png）：左上角位置 + 缩放
+var fail_word_pos_x: float = 522.5
+var fail_word_pos_y: float = 190.5
+var fail_word_scale: float = 1.0
 # 关卡 HUD 钟馗生命值：Hearts 容器在 HeartCounter 内的位置、红心缩放和红心间距
 var heart_pos_x: float = 115.0
 var heart_pos_y: float = 10.0
@@ -158,19 +164,19 @@ var avatar_frame_pos_x: float = 26.0
 var avatar_frame_pos_y: float = 11.0
 var avatar_frame_scale: float = 0.37
 # Chapter3 HUD 胖魔王头像与血条。头像位置是左上角，血条位置是矩形左上角。
-var fdk_avatar_frame_pos_x: float = 1819.0
+var fdk_avatar_frame_pos_x: float = 1799.0
 var fdk_avatar_frame_pos_y: float = 11.0
 var fdk_avatar_frame_scale: float = 0.37
-var fdk_health_bar_pos_x: float = 1510.0
-var fdk_health_bar_pos_y: float = 43.0
+var fdk_health_bar_pos_x: float = 1501.0
+var fdk_health_bar_pos_y: float = 48.0
 var fdk_health_bar_width: float = 274.0
 var fdk_health_bar_height: float = 20.0
 # ChapterBoss HUD Boss 头像与血条。头像位置是左上角，血条位置是矩形左上角。
-var boss_avatar_frame_pos_x: float = 1805.0
-var boss_avatar_frame_pos_y: float = 10.0
+var boss_avatar_frame_pos_x: float = 1792.0
+var boss_avatar_frame_pos_y: float = 11.0
 var boss_avatar_frame_scale: float = 0.1
-var boss_health_bar_pos_x: float = 1350.0
-var boss_health_bar_pos_y: float = 46.0
+var boss_health_bar_pos_x: float = 1349.0
+var boss_health_bar_pos_y: float = 48.0
 var boss_health_bar_width: float = 419.0
 var boss_health_bar_height: float = 28.0
 # 关卡 HUD 铜钱/元宝统计：图标与像素数字在各自 Counter 容器内的位置和缩放
@@ -227,6 +233,9 @@ func load_config() -> void:
 	var fdk_hud_tuning_is_current: bool = (
 		cfg.get_value("meta", "fdk_hud_tuning_version", 0) == FDK_HUD_TUNING_VERSION
 	)
+	var boss_hud_tuning_is_current: bool = (
+		cfg.get_value("meta", "boss_hud_tuning_version", 0) == BOSS_HUD_TUNING_VERSION
+	)
 	# char 段（钟馗本体）与通用 ui 段（红心/头像/铜钱/元宝/倒计时/标题）的版本门控。
 	# 旧 Web 存档没有这两个版本号（默认 0），与当前不符 → 丢弃旧值、用最新 baked 默认重写。
 	var char_tuning_is_current: bool = (
@@ -238,11 +247,18 @@ func load_config() -> void:
 	var bribery_ui_tuning_is_current: bool = (
 		cfg.get_value("meta", "bribery_ui_tuning_version", 0) == BRIBERY_UI_TUNING_VERSION
 	)
+	var fail_ui_tuning_is_current: bool = (
+		cfg.get_value("meta", "fail_ui_tuning_version", 0) == FAIL_UI_TUNING_VERSION
+	)
 	var should_save_config: bool = (
-		not fdk_hud_tuning_is_current
+		not enemy_tuning_is_current
+		or not fdk_mechanism_tuning_is_current
+		or not fdk_hud_tuning_is_current
+		or not boss_hud_tuning_is_current
 		or not char_tuning_is_current
 		or not ui_tuning_is_current
 		or not bribery_ui_tuning_is_current
+		or not fail_ui_tuning_is_current
 	)
 	if char_tuning_is_current:
 		sprite_scale         = cfg.get_value("char", "sprite_scale", sprite_scale)
@@ -283,6 +299,10 @@ func load_config() -> void:
 			bribery_prompt_pos_x = cfg.get_value("ui", "bribery_prompt_pos_x", bribery_prompt_pos_x)
 			bribery_prompt_pos_y = cfg.get_value("ui", "bribery_prompt_pos_y", bribery_prompt_pos_y)
 			bribery_prompt_font_size = cfg.get_value("ui", "bribery_prompt_font_size", bribery_prompt_font_size)
+		if fail_ui_tuning_is_current:
+			fail_word_pos_x   = cfg.get_value("ui", "fail_word_pos_x", fail_word_pos_x)
+			fail_word_pos_y   = cfg.get_value("ui", "fail_word_pos_y", fail_word_pos_y)
+			fail_word_scale   = cfg.get_value("ui", "fail_word_scale", fail_word_scale)
 		heart_pos_x          = cfg.get_value("ui", "heart_pos_x", heart_pos_x)
 		heart_pos_y          = cfg.get_value("ui", "heart_pos_y", heart_pos_y)
 		heart_scale          = cfg.get_value("ui", "heart_scale", heart_scale)
@@ -290,13 +310,6 @@ func load_config() -> void:
 		avatar_frame_pos_x   = cfg.get_value("ui", "avatar_frame_pos_x", avatar_frame_pos_x)
 		avatar_frame_pos_y   = cfg.get_value("ui", "avatar_frame_pos_y", avatar_frame_pos_y)
 		avatar_frame_scale   = cfg.get_value("ui", "avatar_frame_scale", avatar_frame_scale)
-		boss_avatar_frame_pos_x = cfg.get_value("ui", "boss_avatar_frame_pos_x", boss_avatar_frame_pos_x)
-		boss_avatar_frame_pos_y = cfg.get_value("ui", "boss_avatar_frame_pos_y", boss_avatar_frame_pos_y)
-		boss_avatar_frame_scale = cfg.get_value("ui", "boss_avatar_frame_scale", boss_avatar_frame_scale)
-		boss_health_bar_pos_x   = cfg.get_value("ui", "boss_health_bar_pos_x", boss_health_bar_pos_x)
-		boss_health_bar_pos_y   = cfg.get_value("ui", "boss_health_bar_pos_y", boss_health_bar_pos_y)
-		boss_health_bar_width   = cfg.get_value("ui", "boss_health_bar_width", boss_health_bar_width)
-		boss_health_bar_height  = cfg.get_value("ui", "boss_health_bar_height", boss_health_bar_height)
 		coin_icon_pos_x      = cfg.get_value("ui", "coin_icon_pos_x", coin_icon_pos_x)
 		coin_icon_pos_y      = cfg.get_value("ui", "coin_icon_pos_y", coin_icon_pos_y)
 		coin_icon_scale      = cfg.get_value("ui", "coin_icon_scale", coin_icon_scale)
@@ -323,6 +336,14 @@ func load_config() -> void:
 		fdk_health_bar_pos_y   = cfg.get_value("ui", "fdk_health_bar_pos_y", fdk_health_bar_pos_y)
 		fdk_health_bar_width   = cfg.get_value("ui", "fdk_health_bar_width", fdk_health_bar_width)
 		fdk_health_bar_height  = cfg.get_value("ui", "fdk_health_bar_height", fdk_health_bar_height)
+	if boss_hud_tuning_is_current:
+		boss_avatar_frame_pos_x = cfg.get_value("ui", "boss_avatar_frame_pos_x", boss_avatar_frame_pos_x)
+		boss_avatar_frame_pos_y = cfg.get_value("ui", "boss_avatar_frame_pos_y", boss_avatar_frame_pos_y)
+		boss_avatar_frame_scale = cfg.get_value("ui", "boss_avatar_frame_scale", boss_avatar_frame_scale)
+		boss_health_bar_pos_x   = cfg.get_value("ui", "boss_health_bar_pos_x", boss_health_bar_pos_x)
+		boss_health_bar_pos_y   = cfg.get_value("ui", "boss_health_bar_pos_y", boss_health_bar_pos_y)
+		boss_health_bar_width   = cfg.get_value("ui", "boss_health_bar_width", boss_health_bar_width)
+		boss_health_bar_height  = cfg.get_value("ui", "boss_health_bar_height", boss_health_bar_height)
 	if enemy_tuning_is_current:
 		mh_sprite_scale      = cfg.get_value("enemy", "mh_sprite_scale", mh_sprite_scale)
 		mh_sprite_offset_x   = cfg.get_value("enemy", "mh_sprite_offset_x", mh_sprite_offset_x)
@@ -404,9 +425,11 @@ func save_config() -> void:
 	cfg.set_value("meta", "enemy_tuning_version", ENEMY_TUNING_VERSION)
 	cfg.set_value("meta", "fdk_mechanism_tuning_version", FDK_MECHANISM_TUNING_VERSION)
 	cfg.set_value("meta", "fdk_hud_tuning_version", FDK_HUD_TUNING_VERSION)
+	cfg.set_value("meta", "boss_hud_tuning_version", BOSS_HUD_TUNING_VERSION)
 	cfg.set_value("meta", "char_tuning_version", CHAR_TUNING_VERSION)
 	cfg.set_value("meta", "ui_tuning_version", UI_TUNING_VERSION)
 	cfg.set_value("meta", "bribery_ui_tuning_version", BRIBERY_UI_TUNING_VERSION)
+	cfg.set_value("meta", "fail_ui_tuning_version", FAIL_UI_TUNING_VERSION)
 	cfg.set_value("char", "sprite_scale", sprite_scale)
 	cfg.set_value("char", "sprite_offset_x", sprite_offset_x)
 	cfg.set_value("char", "sprite_offset_y", sprite_offset_y)
@@ -504,6 +527,9 @@ func save_config() -> void:
 	cfg.set_value("ui", "bribery_prompt_pos_x", bribery_prompt_pos_x)
 	cfg.set_value("ui", "bribery_prompt_pos_y", bribery_prompt_pos_y)
 	cfg.set_value("ui", "bribery_prompt_font_size", bribery_prompt_font_size)
+	cfg.set_value("ui", "fail_word_pos_x", fail_word_pos_x)
+	cfg.set_value("ui", "fail_word_pos_y", fail_word_pos_y)
+	cfg.set_value("ui", "fail_word_scale", fail_word_scale)
 	cfg.set_value("ui", "heart_pos_x", heart_pos_x)
 	cfg.set_value("ui", "heart_pos_y", heart_pos_y)
 	cfg.set_value("ui", "heart_scale", heart_scale)
