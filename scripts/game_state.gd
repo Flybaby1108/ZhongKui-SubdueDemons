@@ -22,6 +22,7 @@ var yuanbao: int = 0
 var lives: int = MAX_LIVES
 var current_stage: int = 1
 var _allow_start_sequence_music: bool = true
+var _intro_music_active: bool = false
 var _intro_music_player: AudioStreamPlayer = null
 var _start_music_player: AudioStreamPlayer = null
 var _game_over_queued: bool = false
@@ -33,6 +34,36 @@ var _level_cleared: bool = false
 # StartBackground 序列帧的共享缓存：cg_intro 加载完后存到这里，main_menu
 # 直接复用，避免切场景时再次同步 load 造成的 1 秒卡顿。
 var shared_start_bg_frames: Array = []
+
+# 关卡共享动画背景（Chapter_BG_01~22，1920×1080）的常驻 SpriteFrames 缓存。
+# 4 个关卡的动画背景用的是同一批 22 张贴图；若内嵌在各关 .tscn 里，每次切关都会
+# 卸载再重新解码/上传这 22 张（解码后约 176MB RGBA），在单线程 Web 导出
+# （thread_support=false）下全部堆在切场景那一帧，造成明显卡顿。
+# 改由 autoload 常驻持有一份 SpriteFrames：只在首次进关时构建一次，之后所有关卡
+# 直接复用，切关不再释放/重载这批纹理。
+const CHAPTER_BG_FRAME_COUNT := 22
+const CHAPTER_BG_FRAME_FPS := 8.0
+const CHAPTER_BG_ANIM_NAME := &"default"
+var _shared_chapter_bg_frames: SpriteFrames = null
+
+# 返回关卡共享动画背景的 SpriteFrames（首次调用时构建并常驻缓存）。
+# 单线程 Web 下 load() 是同步的，但这里只在整局游戏里发生一次；之后每次切关
+# 直接命中缓存，避免重复解码上传。
+func get_shared_chapter_bg_frames() -> SpriteFrames:
+	if _shared_chapter_bg_frames != null:
+		return _shared_chapter_bg_frames
+	var frames := SpriteFrames.new()
+	frames.set_animation_speed(CHAPTER_BG_ANIM_NAME, CHAPTER_BG_FRAME_FPS)
+	frames.set_animation_loop(CHAPTER_BG_ANIM_NAME, true)
+	for i in range(1, CHAPTER_BG_FRAME_COUNT + 1):
+		var path := "res://assets/sprites/Chapter_BG/Chapter_BG_%02d.jpg" % i
+		var tex := load(path) as Texture2D
+		if tex == null:
+			push_warning("Missing Chapter_BG frame: %s" % path)
+			continue
+		frames.add_frame(CHAPTER_BG_ANIM_NAME, tex)
+	_shared_chapter_bg_frames = frames
+	return _shared_chapter_bg_frames
 
 # 已通过 load_threaded_request 发起、但尚未被 load_threaded_get 取走的资源路径。
 # 各场景统一经由 request_threaded_load / take_threaded_load 登记与注销；
@@ -116,6 +147,7 @@ func _release_start_sequence_music() -> void:
 	_start_music_player = null
 	if had_player:
 		flush_audio_thread()
+	_intro_music_active = false
 
 # 退出收尾安全释放一个音乐播放器节点。
 #
@@ -181,6 +213,9 @@ func flush_audio_thread() -> void:
 
 func _clear_shared_textures() -> void:
 	shared_start_bg_frames.clear()
+	# 常驻的关卡动画背景 SpriteFrames 持有 22 张 1920×1080 纹理，退出前解除引用，
+	# 让纹理引用计数在 RenderingServer 关闭前归零，避免 "Texture leaked" 警告。
+	_shared_chapter_bg_frames = null
 	_transition_resource_cache.clear()
 
 # 关窗兜底：遍历完整场景树，解除所有可见纹理与音频 stream 引用。
@@ -328,6 +363,7 @@ func _emit_wait_timeout(timer_id: int) -> void:
 func prepare_start_sequence_music() -> void:
 	stop_start_sequence_music()
 	_allow_start_sequence_music = true
+	_intro_music_active = false
 
 func enable_start_sequence_music() -> void:
 	_allow_start_sequence_music = true
@@ -336,6 +372,7 @@ func register_intro_music_player(player: AudioStreamPlayer) -> void:
 	if player == null:
 		return
 	_intro_music_player = player
+	_intro_music_active = true
 	_allow_start_sequence_music = true
 	if not player.finished.is_connected(_on_intro_music_finished):
 		player.finished.connect(_on_intro_music_finished)
@@ -343,7 +380,7 @@ func register_intro_music_player(player: AudioStreamPlayer) -> void:
 func play_start_music_if_ready() -> void:
 	if not _allow_start_sequence_music:
 		return
-	if is_instance_valid(_intro_music_player) and _intro_music_player.playing:
+	if _intro_music_active:
 		return
 	play_start_music()
 
@@ -370,6 +407,7 @@ func play_start_music() -> void:
 
 func stop_start_sequence_music() -> void:
 	_allow_start_sequence_music = false
+	_intro_music_active = false
 	if is_instance_valid(_intro_music_player):
 		if _intro_music_player.playing:
 			_intro_music_player.stop()
@@ -382,6 +420,7 @@ func stop_start_sequence_music() -> void:
 	_start_music_player = null
 
 func _on_intro_music_finished() -> void:
+	_intro_music_active = false
 	if is_instance_valid(_intro_music_player):
 		_intro_music_player.queue_free()
 	_intro_music_player = null

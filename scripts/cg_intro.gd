@@ -43,7 +43,6 @@ var _bg_frames: Array  = []
 var _cg_frame_idx: int   = 0     # 当前 CG 帧（0-indexed，对应 CGv1_001）
 var _cg_anim_t:   float  = 0.0   # CG 帧计时累加器
 var _cg_visual_done: bool = false # 所有 CG 帧播完且淡出完成标志
-var _intro_audio_done: bool = false # CGv1.mp3 是否已经播完
 var _cg_done:     bool   = false # 开场整体结束并开始切场景
 
 var _bg_frame_idx: int   = 0
@@ -166,8 +165,6 @@ func _begin_play() -> void:
 	# 播放配乐
 	if music.stream != null:
 		GameState.register_intro_music_player(music)
-		if not music.finished.is_connected(_on_intro_audio_finished):
-			music.finished.connect(_on_intro_audio_finished)
 		music.play()
 
 func _exit_tree() -> void:
@@ -235,7 +232,7 @@ func _process(delta: float) -> void:
 			_cg_frame_idx += 1
 
 			if _cg_frame_idx >= _cg_frames.size():
-				# 所有帧播完，等待音频也播完后再进入菜单。
+				# 所有帧播完，画面立即进入主菜单；CG 音频继续播完后再接 StartMusic。
 				_complete_cg_visuals()
 				return
 
@@ -253,7 +250,7 @@ func _process(delta: float) -> void:
 			# _cg_frame_idx 是 0-indexed；帧号 = _cg_frame_idx + 1
 			var frame_no := _cg_frame_idx + 1
 			if frame_no >= FADE_END_FRAME:
-				# frame_no = FADE_END_FRAME 时 alpha 恰好为 0，画面结束但继续等 CG 音频。
+				# frame_no = FADE_END_FRAME 时 alpha 恰好为 0，画面立即进入主菜单。
 				cg_layer.modulate.a = 0.0
 				_complete_cg_visuals()
 				return
@@ -292,15 +289,7 @@ func _complete_cg_visuals() -> void:
 		_cg_frames[i] = null
 	_cg_frames.clear()
 
-	# CG 画面约 11.6s，CGv1.mp3 约 14.2s；线上版以前在画面结束时就切主菜单，
-	# 导致主菜单音乐提前接管。这里必须等音频 finished 后再切场景。
-	if _intro_audio_done or not (is_instance_valid(music) and music.playing):
-		_finish()
-
-func _on_intro_audio_finished() -> void:
-	_intro_audio_done = true
-	if _cg_visual_done:
-		_finish()
+	_finish()
 
 func _finish(skipped: bool = false) -> void:
 	if _cg_done:
@@ -313,8 +302,13 @@ func _finish(skipped: bool = false) -> void:
 		if is_instance_valid(music) and music.playing:
 			music.stop()
 	else:
-		# 正常播完时，GameState 会在 CGv1.mp3 finished 后接续 StartMusic.mp3。
-		if is_instance_valid(music) and not music.playing:
+		# 正常播完：画面先切到 main_menu，CGv1.mp3 继续挂在 root 下播完。
+		# GameState 用 _intro_music_active 兜住 Web 上 playing 状态短暂不可靠的情况，
+		# 避免 main_menu 提前启动 StartMusic.mp3；finished 后再自动接续。
+		if is_instance_valid(music) and music.playing:
+			music.reparent(get_tree().root)
+			music.process_mode = Node.PROCESS_MODE_ALWAYS
+		elif is_instance_valid(music):
 			music.queue_free()
 
 	# 切场景前主动解除本场景持有的 CG 大纹理引用，避免旧场景被销毁时一次性回收

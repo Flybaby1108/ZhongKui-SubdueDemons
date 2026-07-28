@@ -1,127 +1,9 @@
-[gd_scene load_steps=29 format=3 uid="uid://blevel002"]
+[gd_scene load_steps=5 format=3 uid="uid://blevel002"]
 
 [ext_resource type="Script" uid="uid://dsp88lchs72oy" path="res://scripts/level.gd" id="1_level"]
 [ext_resource type="TileSet" path="res://scenes/tileset.tres" id="2_tileset"]
 [ext_resource type="Texture2D" path="res://assets/sprites/Chapter2/Chapter2_BG_a.png" id="3_bg_a"]
 [ext_resource type="PackedScene" path="res://scenes/hud.tscn" id="4_hud"]
-[ext_resource type="Texture2D" path="res://assets/sprites/Chapter_BG/Chapter_BG_01.jpg" id="bg_b_01"]
-[ext_resource type="Texture2D" path="res://assets/sprites/Chapter_BG/Chapter_BG_02.jpg" id="bg_b_02"]
-[ext_resource type="Texture2D" path="res://assets/sprites/Chapter_BG/Chapter_BG_03.jpg" id="bg_b_03"]
-[ext_resource type="Texture2D" path="res://assets/sprites/Chapter_BG/Chapter_BG_04.jpg" id="bg_b_04"]
-[ext_resource type="Texture2D" path="res://assets/sprites/Chapter_BG/Chapter_BG_05.jpg" id="bg_b_05"]
-[ext_resource type="Texture2D" path="res://assets/sprites/Chapter_BG/Chapter_BG_06.jpg" id="bg_b_06"]
-[ext_resource type="Texture2D" path="res://assets/sprites/Chapter_BG/Chapter_BG_07.jpg" id="bg_b_07"]
-[ext_resource type="Texture2D" path="res://assets/sprites/Chapter_BG/Chapter_BG_08.jpg" id="bg_b_08"]
-[ext_resource type="Texture2D" path="res://assets/sprites/Chapter_BG/Chapter_BG_09.jpg" id="bg_b_09"]
-[ext_resource type="Texture2D" path="res://assets/sprites/Chapter_BG/Chapter_BG_10.jpg" id="bg_b_10"]
-[ext_resource type="Texture2D" path="res://assets/sprites/Chapter_BG/Chapter_BG_11.jpg" id="bg_b_11"]
-[ext_resource type="Texture2D" path="res://assets/sprites/Chapter_BG/Chapter_BG_12.jpg" id="bg_b_12"]
-[ext_resource type="Texture2D" path="res://assets/sprites/Chapter_BG/Chapter_BG_13.jpg" id="bg_b_13"]
-[ext_resource type="Texture2D" path="res://assets/sprites/Chapter_BG/Chapter_BG_14.jpg" id="bg_b_14"]
-[ext_resource type="Texture2D" path="res://assets/sprites/Chapter_BG/Chapter_BG_15.jpg" id="bg_b_15"]
-[ext_resource type="Texture2D" path="res://assets/sprites/Chapter_BG/Chapter_BG_16.jpg" id="bg_b_16"]
-[ext_resource type="Texture2D" path="res://assets/sprites/Chapter_BG/Chapter_BG_17.jpg" id="bg_b_17"]
-[ext_resource type="Texture2D" path="res://assets/sprites/Chapter_BG/Chapter_BG_18.jpg" id="bg_b_18"]
-[ext_resource type="Texture2D" path="res://assets/sprites/Chapter_BG/Chapter_BG_19.jpg" id="bg_b_19"]
-[ext_resource type="Texture2D" path="res://assets/sprites/Chapter_BG/Chapter_BG_20.jpg" id="bg_b_20"]
-[ext_resource type="Texture2D" path="res://assets/sprites/Chapter_BG/Chapter_BG_21.jpg" id="bg_b_21"]
-[ext_resource type="Texture2D" path="res://assets/sprites/Chapter_BG/Chapter_BG_22.jpg" id="bg_b_22"]
-
-[sub_resource type="SpriteFrames" id="SpriteFrames_bg_b"]
-animations = [{
-"frames": [{
-"duration": 1.0,
-"texture": ExtResource("bg_b_01")
-},
-{
-"duration": 1.0,
-"texture": ExtResource("bg_b_02")
-},
-{
-"duration": 1.0,
-"texture": ExtResource("bg_b_03")
-},
-{
-"duration": 1.0,
-"texture": ExtResource("bg_b_04")
-},
-{
-"duration": 1.0,
-"texture": ExtResource("bg_b_05")
-},
-{
-"duration": 1.0,
-"texture": ExtResource("bg_b_06")
-},
-{
-"duration": 1.0,
-"texture": ExtResource("bg_b_07")
-},
-{
-"duration": 1.0,
-"texture": ExtResource("bg_b_08")
-},
-{
-"duration": 1.0,
-"texture": ExtResource("bg_b_09")
-},
-{
-"duration": 1.0,
-"texture": ExtResource("bg_b_10")
-},
-{
-"duration": 1.0,
-"texture": ExtResource("bg_b_11")
-},
-{
-"duration": 1.0,
-"texture": ExtResource("bg_b_12")
-},
-{
-"duration": 1.0,
-"texture": ExtResource("bg_b_13")
-},
-{
-"duration": 1.0,
-"texture": ExtResource("bg_b_14")
-},
-{
-"duration": 1.0,
-"texture": ExtResource("bg_b_15")
-},
-{
-"duration": 1.0,
-"texture": ExtResource("bg_b_16")
-},
-{
-"duration": 1.0,
-"texture": ExtResource("bg_b_17")
-},
-{
-"duration": 1.0,
-"texture": ExtResource("bg_b_18")
-},
-{
-"duration": 1.0,
-"texture": ExtResource("bg_b_19")
-},
-{
-"duration": 1.0,
-"texture": ExtResource("bg_b_20")
-},
-{
-"duration": 1.0,
-"texture": ExtResource("bg_b_21")
-},
-{
-"duration": 1.0,
-"texture": ExtResource("bg_b_22")
-}],
-"loop": true,
-"name": &"default",
-"speed": 8.0
-}]
-
 
 [node name="Level" type="Node2D"]
 script = ExtResource("1_level")
@@ -129,7 +11,6 @@ stage_number = 2
 time_limit = 90.0
 
 [node name="Background_b" type="AnimatedSprite2D" parent="."]
-sprite_frames = SubResource("SpriteFrames_bg_b")
 autoplay = "default"
 centered = false
 

@@ -125,6 +125,7 @@ func _ready() -> void:
 	PALACE_ZOMBIE_SCENE = GameState.load_transition_or_file("res://scenes/enemy_palace_zombie.tscn") as PackedScene
 	FAT_DEMON_KING_SCENE = GameState.load_transition_or_file("res://scenes/enemy_fat_demon_king.tscn") as PackedScene
 	BOSS_SCENE = GameState.load_transition_or_file("res://scenes/enemy_boss.tscn") as PackedScene
+	_setup_shared_chapter_bg()
 	time_remaining = time_limit
 	GameState.current_stage = stage_number
 	GameState.stage_changed.emit(stage_number)
@@ -143,9 +144,27 @@ func _ready() -> void:
 	if is_inside_tree():
 		_play_stage_bgm()
 
+# 关卡动画背景（Background_b）复用 GameState 常驻的共享 SpriteFrames。
+# 22 张 1920×1080 背景帧不再内嵌在各关 .tscn 里逐关卸载/重载，切关时直接命中缓存，
+# 消除单线程 Web 下切场景那一帧的解码/上传卡顿。
+func _setup_shared_chapter_bg() -> void:
+	var bg := get_node_or_null("Background_b") as AnimatedSprite2D
+	if bg == null:
+		return
+	var frames := GameState.get_shared_chapter_bg_frames()
+	if frames == null or frames.get_frame_count(GameState.CHAPTER_BG_ANIM_NAME) == 0:
+		return
+	bg.sprite_frames = frames
+	bg.play(GameState.CHAPTER_BG_ANIM_NAME)
+
 func _exit_tree() -> void:
 	if CharTuning.tuning_changed.is_connected(_apply_chapter3_mechanism_preview_tuning):
 		CharTuning.tuning_changed.disconnect(_apply_chapter3_mechanism_preview_tuning)
+	# 切场景时把本关 AnimatedSprite2D 对共享 SpriteFrames 的引用解除，避免节点销毁流程中
+	# 误连带释放常驻缓存；SpriteFrames 本体由 GameState 持有、跨关常驻。
+	var bg := get_node_or_null("Background_b") as AnimatedSprite2D
+	if bg != null:
+		bg.sprite_frames = null
 	release_cached_resources_for_quit()
 
 func release_cached_resources_for_quit() -> void:
