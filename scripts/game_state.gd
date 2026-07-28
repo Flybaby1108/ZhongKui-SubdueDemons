@@ -11,6 +11,9 @@ signal yuanbao_changed(new_yuanbao: int)
 const MAX_LIVES := 5
 const MAX_STAGE := 4
 const START_MUSIC_PATH := "res://assets/audio/StartMusic.mp3"
+const INTRO_MUSIC_END_PADDING := 0.6
+const INTRO_MUSIC_FORCE_END_PADDING := 2.0
+const INCREMENTAL_LOADS_PER_FRAME := 1
 const COPPER_COINS_PER_YUANBAO := 5
 const REVIVE_COST_COIN_VALUE := 15
 const COIN_SCORE_VALUE := 100
@@ -29,6 +32,7 @@ var _start_music_player: AudioStreamPlayer = null
 # 是否真正播完用。Web 导出里 AudioStreamPlayer.finished 信号会提前 / 抖动触发，
 # 单靠信号会让 StartMusic 在 CG 尾声还没播完时就抢跑，造成两段 BGM 重叠。
 var _intro_music_length: float = 0.0
+var _intro_music_started_msec: int = 0
 # 轮询到的 CG 播放进度出现回退 / playback 结束的连续帧数。Web 上 get_playback_position()
 # 偶发抖动，用连续判定去抖，避免误判提前接续 StartMusic。
 var _intro_music_end_grace: int = 0
@@ -79,6 +83,9 @@ func get_shared_chapter_bg_frames() -> SpriteFrames:
 # 加载完成后、未进入游戏就直接关闭窗口）。因此退出前统一把它们取回释放。
 var _pending_threaded_loads: Dictionary = {}
 var _transition_resource_cache: Dictionary = {}
+var _incremental_load_queue: Array[String] = []
+var _incremental_pending_loads: Dictionary = {}
+var _incremental_loaded_resources: Dictionary = {}
 
 func _notification(what: int) -> void:
 	# autoload 单例的生命周期等于整个进程。它持有的 shared_start_bg_frames
@@ -107,6 +114,7 @@ func _ready() -> void:
 
 func _process(_delta: float) -> void:
 	_poll_intro_music()
+	_process_incremental_resource_loads()
 
 # 轮询开场 CG 配乐的真实播放进度，判断它是否已经播完，再接续开始界面 StartMusic。
 #
@@ -116,6 +124,8 @@ func _process(_delta: float) -> void:
 # 流末尾」为准绳，只有 CG 音频确实播到结尾才切换，彻底消除重叠。
 func _poll_intro_music() -> void:
 	if not _intro_music_active:
+		return
+	if _intro_music_length > 0.0 and not _has_intro_music_elapsed(INTRO_MUSIC_END_PADDING):
 		return
 	if not is_instance_valid(_intro_music_player):
 		# 播放器已被释放（异常路径），直接接续，避免卡在 _intro_music_active。
@@ -128,14 +138,23 @@ func _poll_intro_music() -> void:
 		return
 
 	var pos := player.get_playback_position()
-	# 播放位置走到流末尾附近（留 0.05s 余量）即视为播完。用连续 2 帧确认去抖，
-	# 避免 Web 上单帧位置抖动误判。
-	if pos >= _intro_music_length - 0.05:
+	var reached_stream_end := pos >= _intro_music_length - 0.05
+	var playback_stopped := not player.playing
+	var exceeded_failsafe := _has_intro_music_elapsed(INTRO_MUSIC_FORCE_END_PADDING)
+	# 只有墙钟时间已经跨过完整曲长后，才接受播放位置 / playing 状态的结束判定。
+	# Web 导出里这两个状态都可能提前抖动；墙钟下限可以挡住片尾仍可听见时的抢跑。
+	if reached_stream_end or playback_stopped or exceeded_failsafe:
 		_intro_music_end_grace += 1
 		if _intro_music_end_grace >= 2:
 			_finish_intro_music()
 	else:
 		_intro_music_end_grace = 0
+
+func _has_intro_music_elapsed(extra_seconds: float) -> bool:
+	if _intro_music_started_msec <= 0 or _intro_music_length <= 0.0:
+		return false
+	var elapsed := float(Time.get_ticks_msec() - _intro_music_started_msec) / 1000.0
+	return elapsed >= _intro_music_length + extra_seconds
 
 func _handle_close_request() -> void:
 	if _quitting:
@@ -308,17 +327,37 @@ func request_threaded_load(path: String) -> void:
 	if path.is_empty():
 		return
 	if not _pending_threaded_loads.has(path):
-		ResourceLoader.load_threaded_request(path)
 		_pending_threaded_loads[path] = true
+		if _uses_incremental_resource_loading():
+			_request_incremental_load(path)
+			return
+		var err := ResourceLoader.load_threaded_request(path)
+		if err != OK:
+			_request_incremental_load(path)
 
 func has_pending_threaded_load(path: String) -> bool:
 	return _pending_threaded_loads.has(path)
+
+func is_threaded_load_done(path: String) -> bool:
+	if not _pending_threaded_loads.has(path):
+		return true
+	if _incremental_pending_loads.has(path):
+		return _incremental_loaded_resources.has(path)
+	var status := ResourceLoader.load_threaded_get_status(path)
+	return status != ResourceLoader.THREAD_LOAD_IN_PROGRESS
 
 # 取回一次线程加载结果，并从待取回表注销，释放其内部引用。
 func take_threaded_load(path: String) -> Resource:
 	if not _pending_threaded_loads.has(path):
 		return null
 	_pending_threaded_loads.erase(path)
+	if _incremental_pending_loads.has(path):
+		_incremental_pending_loads.erase(path)
+		if _incremental_loaded_resources.has(path):
+			var cached: Resource = _incremental_loaded_resources[path]
+			_incremental_loaded_resources.erase(path)
+			return cached
+		return load(path)
 	return ResourceLoader.load_threaded_get(path)
 
 func hold_transition_resource(path: String, res: Resource) -> void:
@@ -334,13 +373,46 @@ func load_transition_or_file(path: String) -> Resource:
 func clear_transition_resource_cache() -> void:
 	_transition_resource_cache.clear()
 
+func uses_incremental_resource_loading() -> bool:
+	return _uses_incremental_resource_loading()
+
+func _uses_incremental_resource_loading() -> bool:
+	# GitHub Pages/Web export currently has thread_support=false, so Godot's threaded
+	# loader cannot move heavy texture decode/upload work off the main thread there.
+	return OS.has_feature("web")
+
+func _request_incremental_load(path: String) -> void:
+	if _incremental_pending_loads.has(path):
+		return
+	_incremental_pending_loads[path] = true
+	_incremental_load_queue.append(path)
+
+func _process_incremental_resource_loads() -> void:
+	if _incremental_load_queue.is_empty():
+		return
+	var loaded_count := 0
+	while loaded_count < INCREMENTAL_LOADS_PER_FRAME and not _incremental_load_queue.is_empty():
+		var path := _incremental_load_queue.pop_front() as String
+		if not _pending_threaded_loads.has(path) or not _incremental_pending_loads.has(path):
+			continue
+		if _transition_resource_cache.has(path):
+			_incremental_loaded_resources[path] = _transition_resource_cache[path]
+		else:
+			_incremental_loaded_resources[path] = load(path)
+		loaded_count += 1
+
 # 退出前把所有尚未取走的线程加载请求取回，避免 RefCounted 泄漏。
 func _drain_pending_threaded_loads() -> void:
 	for path in _pending_threaded_loads.keys():
+		if _incremental_pending_loads.has(path):
+			continue
 		# 取回即释放：无论加载是否完成，load_threaded_get 都会结束该请求。
 		ResourceLoader.load_threaded_get(path)
 	_pending_threaded_loads.clear()
 	_transition_resource_cache.clear()
+	_incremental_load_queue.clear()
+	_incremental_pending_loads.clear()
+	_incremental_loaded_resources.clear()
 
 # 节点生命周期内的延迟等待，返回一次性 Timer 节点的 timeout 信号。
 #
@@ -403,6 +475,7 @@ func prepare_start_sequence_music() -> void:
 	stop_start_sequence_music()
 	_allow_start_sequence_music = true
 	_intro_music_active = false
+	_intro_music_started_msec = 0
 
 func enable_start_sequence_music() -> void:
 	_allow_start_sequence_music = true
@@ -414,12 +487,13 @@ func register_intro_music_player(player: AudioStreamPlayer) -> void:
 	_intro_music_active = true
 	_allow_start_sequence_music = true
 	_intro_music_end_grace = 0
+	_intro_music_started_msec = Time.get_ticks_msec()
 	# 缓存流总时长，供 _poll_intro_music 判定是否真正播完。
 	_intro_music_length = 0.0
 	if player.stream != null:
 		_intro_music_length = player.stream.get_length()
-	# finished 信号作为兜底触发（正常桌面端可靠）；Web 上以 _poll_intro_music
-	# 的播放位置判定为主，两者最终都走 _finish_intro_music，不会重复接续。
+	# finished 信号只作为“可能结束”的提示；真正接续前仍要经过墙钟时长校验，
+	# 避免 Web 上 early finished 抢跑 StartMusic。
 	if not player.finished.is_connected(_on_intro_music_finished):
 		player.finished.connect(_on_intro_music_finished)
 
@@ -454,6 +528,9 @@ func play_start_music() -> void:
 func stop_start_sequence_music() -> void:
 	_allow_start_sequence_music = false
 	_intro_music_active = false
+	_intro_music_length = 0.0
+	_intro_music_started_msec = 0
+	_intro_music_end_grace = 0
 	if is_instance_valid(_intro_music_player):
 		if _intro_music_player.playing:
 			_intro_music_player.stop()
@@ -466,15 +543,17 @@ func stop_start_sequence_music() -> void:
 	_start_music_player = null
 
 func _on_intro_music_finished() -> void:
-	# finished 信号兜底路径。Web 上该信号可能在 CG 尾声还没播完时就抖动触发，
+	# finished 信号提示路径。Web 上该信号可能在 CG 尾声还没播完时就抖动触发，
 	# 因此这里不无条件接续 StartMusic：只有当播放位置也确认走到流末尾（或时长
 	# 未知只能信任信号）时才真正结束。否则忽略这次早触发，交给 _poll_intro_music
 	# 在音频真正播完时接续。
 	if not _intro_music_active:
 		return
+	if _intro_music_length > 0.0 and not _has_intro_music_elapsed(INTRO_MUSIC_END_PADDING):
+		return
 	if is_instance_valid(_intro_music_player) and _intro_music_length > 0.0:
 		var pos := _intro_music_player.get_playback_position()
-		if pos < _intro_music_length - 0.15 and _intro_music_player.playing:
+		if pos < _intro_music_length - 0.15 and _intro_music_player.playing and not _has_intro_music_elapsed(INTRO_MUSIC_FORCE_END_PADDING):
 			# 明显早于结尾且仍在播放：判定为 Web 抖动误触发，忽略。
 			return
 	_finish_intro_music()
@@ -487,6 +566,7 @@ func _finish_intro_music() -> void:
 		return
 	_intro_music_active = false
 	_intro_music_length = 0.0
+	_intro_music_started_msec = 0
 	_intro_music_end_grace = 0
 	if is_instance_valid(_intro_music_player):
 		if _intro_music_player.playing:
@@ -626,10 +706,7 @@ func revive_load_done() -> bool:
 	return true
 
 func _threaded_path_done(path: String) -> bool:
-	if not has_pending_threaded_load(path):
-		return true
-	var status := ResourceLoader.load_threaded_get_status(path)
-	return status != ResourceLoader.THREAD_LOAD_IN_PROGRESS
+	return is_threaded_load_done(path)
 
 # 取回复活场景的 PackedScene，并把重资源登记进过渡缓存以持有引用。
 func take_revive_packed_scene() -> PackedScene:

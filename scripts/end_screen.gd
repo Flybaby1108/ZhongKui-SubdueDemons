@@ -96,22 +96,19 @@ func _input(event: InputEvent) -> void:
 		if _bribery_accepting:
 			get_viewport().set_input_as_handled()
 			return
-		if event.is_action_pressed("ui_accept"):
+		if _is_accept_pressed(event):
 			get_viewport().set_input_as_handled()
-			Input.action_release("ui_accept")
 			_start_bribery_black_fade_out()
 			_accept_bribery_offer()
-		elif event.is_action_pressed("ui_cancel") or _is_escape_pressed(event):
+		elif _is_cancel_pressed(event):
 			get_viewport().set_input_as_handled()
 			_start_bribery_black_fade_out()
 			GameState.goto_main_menu()
 		return
 
 	if _showing_fail_screen:
-		if event.is_action_pressed("ui_accept") or event.is_action_pressed("ui_cancel") or _is_escape_pressed(event):
+		if _is_accept_pressed(event) or _is_cancel_pressed(event):
 			get_viewport().set_input_as_handled()
-			Input.action_release("ui_accept")
-			Input.action_release("ui_cancel")
 			_return_to_main_menu_from_fail()
 		return
 
@@ -119,10 +116,8 @@ func _input(event: InputEvent) -> void:
 		get_viewport().set_input_as_handled()
 		return
 
-	if event.is_action_pressed("vacuum") or event.is_action_pressed("ui_accept"):
+	if _is_vacuum_pressed(event) or _is_accept_pressed(event):
 		get_viewport().set_input_as_handled()
-		Input.action_release("vacuum")
-		Input.action_release("ui_accept")
 		if not is_victory and _begin_revive():
 			return
 		GameState.goto_main_menu()
@@ -447,8 +442,38 @@ func _style_bribery_label(label: Label, color: Color, shadow_size: int) -> void:
 	label.add_theme_constant_override("shadow_offset_x", shadow_size)
 	label.add_theme_constant_override("shadow_offset_y", shadow_size)
 
+func _is_accept_pressed(event: InputEvent) -> bool:
+	return _is_enter_pressed(event) or _is_clean_action_press(event, "ui_accept")
+
+func _is_cancel_pressed(event: InputEvent) -> bool:
+	return _is_clean_action_press(event, "ui_cancel") or _is_escape_pressed(event)
+
+func _is_vacuum_pressed(event: InputEvent) -> bool:
+	return _is_enter_pressed(event) or _is_clean_action_press(event, "vacuum")
+
+func _is_clean_action_press(event: InputEvent, action: StringName) -> bool:
+	return event.is_action_pressed(action) and not (event is InputEventKey and event.echo)
+
+func _is_enter_pressed(event: InputEvent) -> bool:
+	if not (event is InputEventKey):
+		return false
+	var key_event := event as InputEventKey
+	if not key_event.pressed or key_event.echo:
+		return false
+	return (
+		key_event.keycode == KEY_ENTER
+		or key_event.keycode == KEY_KP_ENTER
+		or key_event.physical_keycode == KEY_ENTER
+		or key_event.physical_keycode == KEY_KP_ENTER
+	)
+
 func _is_escape_pressed(event: InputEvent) -> bool:
-	return event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_ESCAPE
+	return (
+		event is InputEventKey
+		and event.pressed
+		and not event.echo
+		and ((event as InputEventKey).keycode == KEY_ESCAPE or (event as InputEventKey).physical_keycode == KEY_ESCAPE)
+	)
 
 func _update_hint_text() -> void:
 	if is_victory:

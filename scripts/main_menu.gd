@@ -94,6 +94,17 @@ func _process(delta: float) -> void:
 			if _stage_preload_t < STAGE_PRELOAD_DELAY:
 				return
 			_request_stage_load()
+		if GameState.uses_incremental_resource_loading():
+			if GameState.is_threaded_load_done(STAGE_1_PATH):
+				loading_bar.value = 100.0
+				loading_label.text = "按回车键开始游戏 | 按G键查看新手导读"
+				_loading_done = true
+				if _start_requested:
+					_enter_stage_one()
+			else:
+				loading_bar.value = 0.0
+				loading_label.text = "加载中…"
+			return
 		var progress_arr: Array = []
 		var status := ResourceLoader.load_threaded_get_status(STAGE_1_PATH, progress_arr)
 		var percent: float = 0.0

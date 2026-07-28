@@ -164,8 +164,8 @@ func _begin_play() -> void:
 
 	# 播放配乐
 	if music.stream != null:
-		GameState.register_intro_music_player(music)
 		music.play()
+		GameState.register_intro_music_player(music)
 
 func _exit_tree() -> void:
 	release_cached_resources_for_quit()
@@ -305,8 +305,9 @@ func _finish(skipped: bool = false) -> void:
 		# 正常播完：画面先切到 main_menu，CGv1.mp3 继续挂在 root 下播完。
 		# GameState 用 _intro_music_active 兜住 Web 上 playing 状态短暂不可靠的情况，
 		# 避免 main_menu 提前启动 StartMusic.mp3；finished 后再自动接续。
-		if is_instance_valid(music) and music.playing:
-			music.reparent(get_tree().root)
+		if is_instance_valid(music) and music.stream != null:
+			if music.get_parent() != get_tree().root:
+				music.reparent(get_tree().root)
 			music.process_mode = Node.PROCESS_MODE_ALWAYS
 		elif is_instance_valid(music):
 			music.queue_free()

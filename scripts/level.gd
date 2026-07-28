@@ -837,10 +837,7 @@ func _next_stage_assets_done(next_stage: int) -> bool:
 	return true
 
 func _threaded_path_done(path: String) -> bool:
-	if not GameState.has_pending_threaded_load(path):
-		return true
-	var status := ResourceLoader.load_threaded_get_status(path)
-	return status != ResourceLoader.THREAD_LOAD_IN_PROGRESS
+	return GameState.is_threaded_load_done(path)
 
 func _play_pass_effect() -> void:
 	if is_instance_valid(bgm_player) and bgm_player.playing:
@@ -926,7 +923,10 @@ func _show_pass_effect_black_screen(next_stage: int = -1) -> void:
 	while is_inside_tree():
 		var min_time_done := elapsed >= PASS_EFFECT_BLACK_SCREEN_TIME
 		var next_stage_done := next_stage < 1 or _next_stage_assets_done(next_stage)
-		var preload_wait_expired := elapsed >= PASS_EFFECT_BLACK_SCREEN_TIME + NEXT_STAGE_PRELOAD_BLACK_TIMEOUT
+		var preload_wait_expired := (
+			not GameState.uses_incremental_resource_loading()
+			and elapsed >= PASS_EFFECT_BLACK_SCREEN_TIME + NEXT_STAGE_PRELOAD_BLACK_TIMEOUT
+		)
 		if min_time_done and (next_stage_done or preload_wait_expired):
 			return
 		await GameState.wait(self, 0.05)
@@ -1169,16 +1169,14 @@ func _ensure_pass_effect_assets_ready() -> void:
 	_pass_effect_frames.clear()
 	for i in range(PASS_EFFECT_FRAME_COUNT):
 		var frame_path := _get_pass_effect_frame_path(i)
-		var status := ResourceLoader.load_threaded_get_status(frame_path)
-		while status == ResourceLoader.THREAD_LOAD_IN_PROGRESS and is_inside_tree():
+		while not GameState.is_threaded_load_done(frame_path) and is_inside_tree():
 			if _tearing_down:
 				_pass_effect_assets_loading = false
 				return
 			await get_tree().process_frame
-			status = ResourceLoader.load_threaded_get_status(frame_path)
 
 		var texture: Texture2D = null
-		if status == ResourceLoader.THREAD_LOAD_LOADED:
+		if GameState.is_threaded_load_done(frame_path):
 			texture = GameState.take_threaded_load(frame_path) as Texture2D
 		if texture == null:
 			texture = _load_texture_from_path(frame_path)
@@ -1191,14 +1189,13 @@ func _ensure_pass_effect_assets_ready() -> void:
 	_pass_effect_assets_loading = false
 
 func _get_threaded_audio(path: String) -> AudioStream:
-	var status := ResourceLoader.load_threaded_get_status(path)
-	while status == ResourceLoader.THREAD_LOAD_IN_PROGRESS and is_inside_tree():
+	while not GameState.is_threaded_load_done(path) and is_inside_tree():
 		if _tearing_down:
 			return null
 		await get_tree().process_frame
-		status = ResourceLoader.load_threaded_get_status(path)
-	if status == ResourceLoader.THREAD_LOAD_LOADED:
-		return GameState.take_threaded_load(path) as AudioStream
+	var stream := GameState.take_threaded_load(path) as AudioStream
+	if stream != null:
+		return stream
 	return load(path) as AudioStream
 
 func _get_pass_effect_frame_path(index: int) -> String:
