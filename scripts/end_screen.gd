@@ -16,6 +16,8 @@ const BRIBERY_LAUGHTER_SFX_PATH := "res://assets/audio/Bribery_Laughter.mp3"
 const BRIBERY_COIN_SFX_PATH := "res://assets/audio/Bribery_Coin.mp3"
 const BRIBERY_FADE_IN_TIME := 1.0
 const BRIBERY_TEXT_FADE_IN_TIME := 2.0
+# 玩家按 Enter/ESC 后黑屏渐隐时长（秒）。
+const BRIBERY_BLACK_FADE_OUT_TIME := 1.0
 
 @onready var title_label: Label = $Center/Title
 @onready var score_label: Label = $Center/Score
@@ -32,6 +34,9 @@ var _bribery_background: TextureRect = null
 var _bribery_title_image: TextureRect = null
 var _bribery_fade_overlay: ColorRect = null
 var _bribery_fade_tween: Tween = null
+# 玩家在复活界面按 Enter/ESC 后叠加的渐隐黑屏遮罩与对应 tween。
+var _bribery_black_overlay: ColorRect = null
+var _bribery_black_tween: Tween = null
 var _bribery_title_tween: Tween = null
 var _bribery_laughter_player: AudioStreamPlayer = null
 var _bribery_coin_player: AudioStreamPlayer = null
@@ -94,9 +99,11 @@ func _input(event: InputEvent) -> void:
 		if event.is_action_pressed("ui_accept"):
 			get_viewport().set_input_as_handled()
 			Input.action_release("ui_accept")
+			_start_bribery_black_fade_out()
 			_accept_bribery_offer()
 		elif event.is_action_pressed("ui_cancel") or _is_escape_pressed(event):
 			get_viewport().set_input_as_handled()
+			_start_bribery_black_fade_out()
 			GameState.goto_main_menu()
 		return
 
@@ -272,6 +279,24 @@ func _finish_bribery_fade_in() -> void:
 	_bribery_fade_tween = null
 	_play_bribery_laughter_sfx()
 	_start_bribery_title_fade_in()
+
+# 玩家在复活界面按 Enter/ESC 后立刻叠加一层黑屏并渐隐，与复活/返回主菜单逻辑并行。
+func _start_bribery_black_fade_out() -> void:
+	if is_instance_valid(_bribery_black_overlay):
+		return
+	_bribery_black_overlay = ColorRect.new()
+	_bribery_black_overlay.name = "BriberyBlackOverlay"
+	_bribery_black_overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_bribery_black_overlay.color = Color.BLACK
+	_bribery_black_overlay.modulate.a = 0.0
+	_bribery_black_overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(_bribery_black_overlay)
+	move_child(_bribery_black_overlay, get_child_count() - 1)
+
+	_bribery_black_tween = create_tween()
+	_bribery_black_tween.set_trans(Tween.TRANS_SINE)
+	_bribery_black_tween.set_ease(Tween.EASE_IN_OUT)
+	_bribery_black_tween.tween_property(_bribery_black_overlay, "modulate:a", 1.0, BRIBERY_BLACK_FADE_OUT_TIME)
 
 func _start_bribery_title_fade_in() -> void:
 	if not is_instance_valid(_bribery_title_image):
@@ -488,6 +513,12 @@ func _exit_tree() -> void:
 	if is_instance_valid(_bribery_fade_overlay):
 		_bribery_fade_overlay.queue_free()
 	_bribery_fade_overlay = null
+	if _bribery_black_tween != null and _bribery_black_tween.is_valid():
+		_bribery_black_tween.kill()
+	_bribery_black_tween = null
+	if is_instance_valid(_bribery_black_overlay):
+		_bribery_black_overlay.queue_free()
+	_bribery_black_overlay = null
 	if is_instance_valid(_bribery_laughter_player):
 		_bribery_laughter_player.stop()
 		_bribery_laughter_player.stream = null

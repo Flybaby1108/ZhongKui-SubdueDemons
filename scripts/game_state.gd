@@ -25,6 +25,13 @@ var _allow_start_sequence_music: bool = true
 var _intro_music_active: bool = false
 var _intro_music_player: AudioStreamPlayer = null
 var _start_music_player: AudioStreamPlayer = null
+# 开场 CG 配乐（CGv1.mp3）的总时长（秒）。register 时缓存，供 _process 轮询判断
+# 是否真正播完用。Web 导出里 AudioStreamPlayer.finished 信号会提前 / 抖动触发，
+# 单靠信号会让 StartMusic 在 CG 尾声还没播完时就抢跑，造成两段 BGM 重叠。
+var _intro_music_length: float = 0.0
+# 轮询到的 CG 播放进度出现回退 / playback 结束的连续帧数。Web 上 get_playback_position()
+# 偶发抖动，用连续判定去抖，避免误判提前接续 StartMusic。
+var _intro_music_end_grace: int = 0
 var _game_over_queued: bool = false
 # 关卡已进入"通关"流程（_on_stage_clear 起）：置位后任何延迟触发的 goto_game_over
 # 都会被忽略，避免通关动画期间玩家因 hold_timer 超时引爆 / 延迟扣血把场景切到
@@ -97,6 +104,38 @@ var _quitting: bool = false
 func _ready() -> void:
 	# 关窗时不立即退出，改由 _handle_close_request 完成异步清理后手动 quit。
 	get_tree().set_auto_accept_quit(false)
+
+func _process(_delta: float) -> void:
+	_poll_intro_music()
+
+# 轮询开场 CG 配乐的真实播放进度，判断它是否已经播完，再接续开始界面 StartMusic。
+#
+# 为什么不只依赖 finished 信号：Web 导出下 AudioStreamPlayer.finished 会因音频线程
+# 缓冲 / 解码时序而提前或抖动触发（playing 状态同样短暂不可靠），导致 StartMusic 在
+# CGv1.mp3 尾声还没播完时就抢跑，两段 BGM 叠在一起。这里以「播放位置是否真的走到
+# 流末尾」为准绳，只有 CG 音频确实播到结尾才切换，彻底消除重叠。
+func _poll_intro_music() -> void:
+	if not _intro_music_active:
+		return
+	if not is_instance_valid(_intro_music_player):
+		# 播放器已被释放（异常路径），直接接续，避免卡在 _intro_music_active。
+		_finish_intro_music()
+		return
+
+	var player := _intro_music_player
+	# 时长未知（Web 上偶发拿不到）时退化为信号驱动，不在此强行判定结束。
+	if _intro_music_length <= 0.0:
+		return
+
+	var pos := player.get_playback_position()
+	# 播放位置走到流末尾附近（留 0.05s 余量）即视为播完。用连续 2 帧确认去抖，
+	# 避免 Web 上单帧位置抖动误判。
+	if pos >= _intro_music_length - 0.05:
+		_intro_music_end_grace += 1
+		if _intro_music_end_grace >= 2:
+			_finish_intro_music()
+	else:
+		_intro_music_end_grace = 0
 
 func _handle_close_request() -> void:
 	if _quitting:
@@ -374,6 +413,13 @@ func register_intro_music_player(player: AudioStreamPlayer) -> void:
 	_intro_music_player = player
 	_intro_music_active = true
 	_allow_start_sequence_music = true
+	_intro_music_end_grace = 0
+	# 缓存流总时长，供 _poll_intro_music 判定是否真正播完。
+	_intro_music_length = 0.0
+	if player.stream != null:
+		_intro_music_length = player.stream.get_length()
+	# finished 信号作为兜底触发（正常桌面端可靠）；Web 上以 _poll_intro_music
+	# 的播放位置判定为主，两者最终都走 _finish_intro_music，不会重复接续。
 	if not player.finished.is_connected(_on_intro_music_finished):
 		player.finished.connect(_on_intro_music_finished)
 
@@ -420,8 +466,31 @@ func stop_start_sequence_music() -> void:
 	_start_music_player = null
 
 func _on_intro_music_finished() -> void:
+	# finished 信号兜底路径。Web 上该信号可能在 CG 尾声还没播完时就抖动触发，
+	# 因此这里不无条件接续 StartMusic：只有当播放位置也确认走到流末尾（或时长
+	# 未知只能信任信号）时才真正结束。否则忽略这次早触发，交给 _poll_intro_music
+	# 在音频真正播完时接续。
+	if not _intro_music_active:
+		return
+	if is_instance_valid(_intro_music_player) and _intro_music_length > 0.0:
+		var pos := _intro_music_player.get_playback_position()
+		if pos < _intro_music_length - 0.15 and _intro_music_player.playing:
+			# 明显早于结尾且仍在播放：判定为 Web 抖动误触发，忽略。
+			return
+	_finish_intro_music()
+
+# 开场 CG 配乐确认播完后，释放它并接续开始界面 StartMusic。信号与轮询两条路径
+# 都汇入此函数；_intro_music_active 先置 false，重复进入将被 early-return 挡住，
+# 保证 StartMusic 只启动一次。
+func _finish_intro_music() -> void:
+	if not _intro_music_active:
+		return
 	_intro_music_active = false
+	_intro_music_length = 0.0
+	_intro_music_end_grace = 0
 	if is_instance_valid(_intro_music_player):
+		if _intro_music_player.playing:
+			_intro_music_player.stop()
 		_intro_music_player.queue_free()
 	_intro_music_player = null
 	play_start_music()
