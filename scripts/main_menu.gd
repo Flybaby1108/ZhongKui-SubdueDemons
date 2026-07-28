@@ -3,6 +3,7 @@ extends Control
 const STAGE_1_PATH := "res://scenes/level_1.tscn"
 const GUIDE_KEY := KEY_G
 const BLINK_PERIOD := 0.9  # 闪烁周期（秒）
+const STAGE_PRELOAD_DELAY := 0.8  # 让菜单先稳定显示几帧，再开始预载第一关
 
 # 背景循环播放（从 mp4 抽帧得到的 46 张 1920×1080 JPG）
 # BG_FRAME_INTERVAL = 1/fps；46 帧 × 0.05 = 2.3s 一轮 (20fps)。如需改速度调此值。
@@ -21,6 +22,9 @@ const TITLE_FADE_IN_DURATION := 1.5
 
 var _loading_done: bool = false
 var _blink_t: float = 0.0
+var _stage_load_requested: bool = false
+var _stage_preload_t: float = 0.0
+var _start_requested: bool = false
 
 var _bg_frames: Array = []
 var _bg_frame_idx: int = 0
@@ -33,8 +37,6 @@ func _ready() -> void:
 	GameState.reset_game()
 	GameState.enable_start_sequence_music()
 	GameState.play_start_music_if_ready()
-	# 启动后台线程加载第一关（经 GameState 登记，退出时统一取回，避免泄漏）
-	GameState.request_threaded_load(STAGE_1_PATH)
 	# 优先复用 cg_intro 阶段已加载并 GPU 预热好的 BG 帧（autoload 共享缓存），
 	# 避免切场景瞬间再次同步 load 46 张 1920×1080 JPG 导致的 ~1 秒卡顿。
 	if not GameState.shared_start_bg_frames.is_empty():
@@ -50,6 +52,12 @@ func _ready() -> void:
 	# 标题位置/大小跟随 CharTuning（F1 调参面板可实时调节）
 	CharTuning.tuning_changed.connect(_apply_title_tuning)
 	_apply_title_tuning()
+	# Web 导出未开启线程支持时，load_threaded_request 仍可能抢占主线程。
+	# 线上版先直接展示菜单，等玩家按开始后再加载关卡，避免卡在 CG -> 菜单的衔接帧。
+	if OS.has_feature("web"):
+		_loading_done = true
+		loading_bar.visible = false
+		loading_label.text = "按回车键开始游戏 | 按G键查看新手导读"
 
 func _exit_tree() -> void:
 	release_cached_resources_for_quit()
@@ -87,6 +95,11 @@ func _process(delta: float) -> void:
 		var fade_progress: float = clamp((_title_fade_t - TITLE_FADE_IN_DELAY) / TITLE_FADE_IN_DURATION, 0.0, 1.0)
 		title.modulate.a = fade_progress
 	if not _loading_done:
+		if not _stage_load_requested:
+			_stage_preload_t += delta
+			if _stage_preload_t < STAGE_PRELOAD_DELAY:
+				return
+			_request_stage_load()
 		var progress_arr: Array = []
 		var status := ResourceLoader.load_threaded_get_status(STAGE_1_PATH, progress_arr)
 		var percent: float = 0.0
@@ -100,6 +113,8 @@ func _process(delta: float) -> void:
 				loading_bar.value = 100.0
 				loading_label.text = "按回车键开始游戏 | 按G键查看新手导读"
 				_loading_done = true
+				if _start_requested:
+					_enter_stage_one()
 			ResourceLoader.THREAD_LOAD_FAILED, ResourceLoader.THREAD_LOAD_INVALID_RESOURCE:
 				loading_label.text = "加载失败"
 				_loading_done = true
@@ -123,23 +138,42 @@ func _input(event: InputEvent) -> void:
 		return
 	# 回车键开始游戏（ui_accept 默认含回车）
 	if event.is_action_pressed("ui_accept"):
+		get_viewport().set_input_as_handled()
+		if OS.has_feature("web") and not _stage_load_requested:
+			_start_requested = true
+			_loading_done = false
+			_request_stage_load()
+			return
 		if not _loading_done:
 			return
-		get_viewport().set_input_as_handled()
-		GameState.stop_start_sequence_music()
-		# 优先用已预加载的 PackedScene 切换，避免再次读盘
-		var packed: PackedScene = GameState.take_threaded_load(STAGE_1_PATH) as PackedScene
-		if packed != null:
-			GameState.current_stage = 1
-			GameState.score = 0
-			GameState.coins = 0
-			GameState.yuanbao = 0
-			GameState.lives = GameState.MAX_LIVES
-			GameState.score_changed.emit(GameState.score)
-			GameState.coins_changed.emit(GameState.coins)
-			GameState.yuanbao_changed.emit(GameState.yuanbao)
-			GameState.lives_changed.emit(GameState.lives)
-			get_tree().change_scene_to_packed(packed)
-		else:
-			# 预加载结果丢失则回退到普通切换
-			GameState.goto_stage(1)
+		_enter_stage_one()
+
+func _request_stage_load() -> void:
+	if _stage_load_requested:
+		return
+	_stage_load_requested = true
+	loading_bar.visible = true
+	loading_bar.value = 0.0
+	loading_label.modulate.a = 1.0
+	loading_label.text = "加载中… 0%"
+	# 启动后台线程加载第一关（经 GameState 登记，退出时统一取回，避免泄漏）
+	GameState.request_threaded_load(STAGE_1_PATH)
+
+func _enter_stage_one() -> void:
+	GameState.stop_start_sequence_music()
+	# 优先用已预加载的 PackedScene 切换，避免再次读盘
+	var packed: PackedScene = GameState.take_threaded_load(STAGE_1_PATH) as PackedScene
+	if packed != null:
+		GameState.current_stage = 1
+		GameState.score = 0
+		GameState.coins = 0
+		GameState.yuanbao = 0
+		GameState.lives = GameState.MAX_LIVES
+		GameState.score_changed.emit(GameState.score)
+		GameState.coins_changed.emit(GameState.coins)
+		GameState.yuanbao_changed.emit(GameState.yuanbao)
+		GameState.lives_changed.emit(GameState.lives)
+		get_tree().change_scene_to_packed(packed)
+	else:
+		# 预加载结果丢失则回退到普通切换
+		GameState.goto_stage(1)

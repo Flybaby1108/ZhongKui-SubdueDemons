@@ -3,7 +3,7 @@ extends Control
 @export var is_victory: bool = false
 
 const END_EFFECT_PATH := "res://assets/audio/EndEffect.mp3"
-const GAME_OVER_SFX_PATH := "res://assets/audio/GameOver.mp3"
+const FAIL_SFX_PATH := "res://assets/audio/Fail.mp3"
 const FAIL_BACKGROUND_PATH := "res://assets/sprites/Fail/Fail_Background.jpg"
 const FAIL_WORD_PATH := "res://assets/sprites/Fail/Fail_Word.png"
 const FAIL_WORD_DELAY_TIME := 1.0
@@ -12,6 +12,8 @@ const FAIL_AUTO_BLACK_TIME := 4.0
 const FAIL_BLACK_FADE_OUT_TIME := 1.0
 const BRIBERY_IMAGE_PATH := "res://assets/sprites/bribery/Bribery.jpg"
 const BRIBERY_TEXT_PATH := "res://assets/sprites/bribery/Bribery_Text.png"
+const BRIBERY_LAUGHTER_SFX_PATH := "res://assets/audio/Bribery_Laughter.mp3"
+const BRIBERY_COIN_SFX_PATH := "res://assets/audio/Bribery_Coin.mp3"
 const BRIBERY_FADE_IN_TIME := 1.0
 const BRIBERY_TEXT_FADE_IN_TIME := 2.0
 
@@ -31,8 +33,11 @@ var _bribery_title_image: TextureRect = null
 var _bribery_fade_overlay: ColorRect = null
 var _bribery_fade_tween: Tween = null
 var _bribery_title_tween: Tween = null
+var _bribery_laughter_player: AudioStreamPlayer = null
+var _bribery_coin_player: AudioStreamPlayer = null
 var _showing_fail_screen: bool = false
 var _showing_bribery_offer: bool = false
+var _bribery_accepting: bool = false
 var _returning_to_menu: bool = false
 
 func _ready() -> void:
@@ -45,16 +50,16 @@ func _ready() -> void:
 	score_label.text = "FINAL SCORE: %06d" % GameState.score
 	_update_hint_text()
 
-	# GAME OVER 界面播放失败音效，胜利界面播放结算音乐
+	# Fail_Background 界面播放失败音效，胜利界面播放结算音乐
 	if not is_victory:
 		_setup_fail_screen()
-		var go_stream := load(GAME_OVER_SFX_PATH) as AudioStream
-		if go_stream == null:
-			push_warning("GameOver.mp3 not found: %s" % GAME_OVER_SFX_PATH)
+		var fail_stream := load(FAIL_SFX_PATH) as AudioStream
+		if fail_stream == null:
+			push_warning("Fail.mp3 not found: %s" % FAIL_SFX_PATH)
 			return
 		_end_effect_player = AudioStreamPlayer.new()
-		_end_effect_player.name = "GameOverSFX"
-		_end_effect_player.stream = go_stream
+		_end_effect_player.name = "FailSFX"
+		_end_effect_player.stream = fail_stream
 		add_child(_end_effect_player)
 		_end_effect_player.play()
 		return
@@ -75,10 +80,13 @@ func _ready() -> void:
 
 func _input(event: InputEvent) -> void:
 	if _showing_bribery_offer:
+		if _bribery_accepting:
+			get_viewport().set_input_as_handled()
+			return
 		if event.is_action_pressed("ui_accept"):
 			get_viewport().set_input_as_handled()
 			Input.action_release("ui_accept")
-			GameState.revive_from_game_over()
+			_accept_bribery_offer()
 		elif event.is_action_pressed("ui_cancel") or _is_escape_pressed(event):
 			get_viewport().set_input_as_handled()
 			GameState.goto_main_menu()
@@ -231,6 +239,7 @@ func _setup_bribery_offer() -> void:
 	hint_label.add_theme_font_size_override("font_size", 38)
 	_style_bribery_label(hint_label, Color(0.96, 0.92, 0.82, 1.0), 3)
 	_apply_bribery_prompt_tuning()
+	_setup_bribery_sfx()
 	_start_bribery_fade_in()
 
 func _start_bribery_fade_in() -> void:
@@ -249,6 +258,7 @@ func _finish_bribery_fade_in() -> void:
 		_bribery_fade_overlay.queue_free()
 	_bribery_fade_overlay = null
 	_bribery_fade_tween = null
+	_play_bribery_laughter_sfx()
 	_start_bribery_title_fade_in()
 
 func _start_bribery_title_fade_in() -> void:
@@ -267,6 +277,40 @@ func _show_bribery_prompt() -> void:
 	if is_instance_valid(hint_label):
 		hint_label.visible = true
 	_bribery_title_tween = null
+
+func _setup_bribery_sfx() -> void:
+	_bribery_laughter_player = _create_bribery_sfx_player(BRIBERY_LAUGHTER_SFX_PATH, "BriberyLaughterSfx")
+	_bribery_coin_player = _create_bribery_sfx_player(BRIBERY_COIN_SFX_PATH, "BriberyCoinSfx")
+
+func _create_bribery_sfx_player(path: String, player_name: String) -> AudioStreamPlayer:
+	var loaded_stream := load(path) as AudioStream
+	if loaded_stream == null:
+		push_warning("%s not found: %s" % [player_name, path])
+		return null
+	var stream := loaded_stream.duplicate() as AudioStream
+	if stream is AudioStreamMP3:
+		(stream as AudioStreamMP3).loop = false
+	var player := AudioStreamPlayer.new()
+	player.name = player_name
+	player.stream = stream
+	add_child(player)
+	return player
+
+func _play_bribery_laughter_sfx() -> void:
+	if _bribery_laughter_player == null or _bribery_laughter_player.stream == null:
+		return
+	_bribery_laughter_player.play()
+
+func _accept_bribery_offer() -> void:
+	if _bribery_accepting:
+		return
+	_bribery_accepting = true
+	if _bribery_coin_player != null and _bribery_coin_player.stream != null:
+		_bribery_coin_player.play()
+		await _bribery_coin_player.finished
+	if not is_inside_tree():
+		return
+	GameState.revive_from_game_over()
 
 func _apply_fail_word_tuning() -> void:
 	if not is_instance_valid(_fail_word_image):
@@ -339,7 +383,7 @@ func _update_hint_text() -> void:
 
 func _exit_tree() -> void:
 	# 退出（含进程关闭）时若播放器仍在播放，其 AudioStreamPlaybackMP3 会在 AudioServer
-	# 关闭前继续引用 GameOver.mp3 / EndEffect.mp3，触发
+	# 关闭前继续引用 Fail.mp3 / EndEffect.mp3，触发
 	# "ObjectDB instances leaked at exit" / "resources still in use at exit"。
 	# 退出路径下 SceneTree 已不再 tick，queue_free 的延迟队列不会被 flush，因此用
 	# free() 立即释放，并先解除 stream 引用让资源引用计数归零。退出竞争由 GameState
@@ -389,3 +433,13 @@ func _exit_tree() -> void:
 	if is_instance_valid(_bribery_fade_overlay):
 		_bribery_fade_overlay.queue_free()
 	_bribery_fade_overlay = null
+	if is_instance_valid(_bribery_laughter_player):
+		_bribery_laughter_player.stop()
+		_bribery_laughter_player.stream = null
+		_bribery_laughter_player.free()
+	_bribery_laughter_player = null
+	if is_instance_valid(_bribery_coin_player):
+		_bribery_coin_player.stop()
+		_bribery_coin_player.stream = null
+		_bribery_coin_player.free()
+	_bribery_coin_player = null
