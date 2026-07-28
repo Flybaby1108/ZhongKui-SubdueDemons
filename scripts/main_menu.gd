@@ -52,12 +52,6 @@ func _ready() -> void:
 	# 标题位置/大小跟随 CharTuning（F1 调参面板可实时调节）
 	CharTuning.tuning_changed.connect(_apply_title_tuning)
 	_apply_title_tuning()
-	# Web 导出未开启线程支持时，load_threaded_request 仍可能抢占主线程。
-	# 线上版先直接展示菜单，等玩家按开始后再加载关卡，避免卡在 CG -> 菜单的衔接帧。
-	if OS.has_feature("web"):
-		_loading_done = true
-		loading_bar.visible = false
-		loading_label.text = "按回车键开始游戏 | 按G键查看新手导读"
 
 func _exit_tree() -> void:
 	release_cached_resources_for_quit()
@@ -139,12 +133,10 @@ func _input(event: InputEvent) -> void:
 	# 回车键开始游戏（ui_accept 默认含回车）
 	if event.is_action_pressed("ui_accept"):
 		get_viewport().set_input_as_handled()
-		if OS.has_feature("web") and not _stage_load_requested:
-			_start_requested = true
-			_loading_done = false
-			_request_stage_load()
-			return
 		if not _loading_done:
+			_start_requested = true
+			if not _stage_load_requested:
+				_request_stage_load()
 			return
 		_enter_stage_one()
 

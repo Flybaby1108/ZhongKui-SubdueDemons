@@ -42,7 +42,9 @@ var _bg_frames: Array  = []
 
 var _cg_frame_idx: int   = 0     # 当前 CG 帧（0-indexed，对应 CGv1_001）
 var _cg_anim_t:   float  = 0.0   # CG 帧计时累加器
-var _cg_done:     bool   = false # 所有 CG 帧播完且淡出完成标志
+var _cg_visual_done: bool = false # 所有 CG 帧播完且淡出完成标志
+var _intro_audio_done: bool = false # CGv1.mp3 是否已经播完
+var _cg_done:     bool   = false # 开场整体结束并开始切场景
 
 var _bg_frame_idx: int   = 0
 var _bg_anim_t:    float = 0.0
@@ -164,6 +166,8 @@ func _begin_play() -> void:
 	# 播放配乐
 	if music.stream != null:
 		GameState.register_intro_music_player(music)
+		if not music.finished.is_connected(_on_intro_audio_finished):
+			music.finished.connect(_on_intro_audio_finished)
 		music.play()
 
 func _exit_tree() -> void:
@@ -223,42 +227,43 @@ func _process(delta: float) -> void:
 		bg_layer.texture = _bg_frames[_bg_frame_idx]
 
 	# ── CG 帧推进 ─────────────────────────────────────────────────
-	_cg_anim_t += delta
-	while _cg_anim_t >= CG_FRAME_INTERVAL:
-		_cg_anim_t -= CG_FRAME_INTERVAL
-		var prev_idx := _cg_frame_idx
-		_cg_frame_idx += 1
+	if not _cg_visual_done:
+		_cg_anim_t += delta
+		while _cg_anim_t >= CG_FRAME_INTERVAL:
+			_cg_anim_t -= CG_FRAME_INTERVAL
+			var prev_idx := _cg_frame_idx
+			_cg_frame_idx += 1
 
-		if _cg_frame_idx >= _cg_frames.size():
-			# 所有帧播完 → 强制进入菜单（防止边界越界）
-			_finish()
-			return
+			if _cg_frame_idx >= _cg_frames.size():
+				# 所有帧播完，等待音频也播完后再进入菜单。
+				_complete_cg_visuals()
+				return
 
-		cg_layer.texture = _cg_frames[_cg_frame_idx]
+			cg_layer.texture = _cg_frames[_cg_frame_idx]
 
-		# 关键优化：CG 是单向播放、永不回头的序列。每推进一帧，就把刚刚离开
-		# 显示的上一帧从数组里解除引用（置 null），让这张 1920×1080×4 ≈ 8.3MB
-		# 的纹理在播放过程中被分摊回收。否则 279 帧全部驻留（≈2.3GB 显存），
-		# 切场景时旧场景被一次性销毁，这 279 张大纹理的 GPU 资源同步回收会砸在
-		# 切换的那一帧上，造成肉眼可见的卡顿。逐帧释放后，切场景时几乎无纹理待回收。
-		if prev_idx >= 0 and prev_idx < _cg_frames.size():
-			_cg_frames[prev_idx] = null
+			# 关键优化：CG 是单向播放、永不回头的序列。每推进一帧，就把刚刚离开
+			# 显示的上一帧从数组里解除引用（置 null），让这张 1920×1080×4 ≈ 8.3MB
+			# 的纹理在播放过程中被分摊回收。否则 279 帧全部驻留（≈2.3GB 显存），
+			# 切场景时旧场景被一次性销毁，这 279 张大纹理的 GPU 资源同步回收会砸在
+			# 切换的那一帧上，造成肉眼可见的卡顿。逐帧释放后，切场景时几乎无纹理待回收。
+			if prev_idx >= 0 and prev_idx < _cg_frames.size():
+				_cg_frames[prev_idx] = null
 
-		# ── 淡出计算（基于 1-indexed 帧号） ──────────────────────
-		# _cg_frame_idx 是 0-indexed；帧号 = _cg_frame_idx + 1
-		var frame_no := _cg_frame_idx + 1
-		if frame_no >= FADE_END_FRAME:
-			# frame_no = FADE_END_FRAME 时 alpha 恰好为 0 → 直接结束
-			cg_layer.modulate.a = 0.0
-			_finish()
-			return
-		elif frame_no >= FADE_START_FRAME:
-			# FADE_START_FRAME(273) ~ FADE_END_FRAME-1(277)：线性插值 1→0
-			var fade_range := float(FADE_END_FRAME - FADE_START_FRAME)
-			var fade_done  := float(frame_no - FADE_START_FRAME)
-			cg_layer.modulate.a = 1.0 - (fade_done / fade_range)
-		else:
-			cg_layer.modulate.a = 1.0
+			# ── 淡出计算（基于 1-indexed 帧号） ──────────────────────
+			# _cg_frame_idx 是 0-indexed；帧号 = _cg_frame_idx + 1
+			var frame_no := _cg_frame_idx + 1
+			if frame_no >= FADE_END_FRAME:
+				# frame_no = FADE_END_FRAME 时 alpha 恰好为 0，画面结束但继续等 CG 音频。
+				cg_layer.modulate.a = 0.0
+				_complete_cg_visuals()
+				return
+			elif frame_no >= FADE_START_FRAME:
+				# FADE_START_FRAME(273) ~ FADE_END_FRAME-1(277)：线性插值 1→0
+				var fade_range := float(FADE_END_FRAME - FADE_START_FRAME)
+				var fade_done  := float(frame_no - FADE_START_FRAME)
+				cg_layer.modulate.a = 1.0 - (fade_done / fade_range)
+			else:
+				cg_layer.modulate.a = 1.0
 
 	# ── "按回车跳过" 标签闪烁 ─────────────────────────────────────
 	_skip_blink_t += delta
@@ -275,6 +280,28 @@ func _input(event: InputEvent) -> void:
 			# CG 播放中按回车跳过：终止 CGv1.mp3 播放
 			_finish(true)
 
+func _complete_cg_visuals() -> void:
+	if _cg_visual_done:
+		return
+	_cg_visual_done = true
+
+	skip_label.visible = false
+	if is_instance_valid(cg_layer):
+		cg_layer.texture = null
+	for i in range(_cg_frames.size()):
+		_cg_frames[i] = null
+	_cg_frames.clear()
+
+	# CG 画面约 11.6s，CGv1.mp3 约 14.2s；线上版以前在画面结束时就切主菜单，
+	# 导致主菜单音乐提前接管。这里必须等音频 finished 后再切场景。
+	if _intro_audio_done or not (is_instance_valid(music) and music.playing):
+		_finish()
+
+func _on_intro_audio_finished() -> void:
+	_intro_audio_done = true
+	if _cg_visual_done:
+		_finish()
+
 func _finish(skipped: bool = false) -> void:
 	if _cg_done:
 		return
@@ -286,20 +313,15 @@ func _finish(skipped: bool = false) -> void:
 		if is_instance_valid(music) and music.playing:
 			music.stop()
 	else:
-		# 正常播完：把 Music 节点 reparent 到 SceneTree.root，使其脱离当前场景，
-		# 不会随 cg_intro 一起被释放。CGv1.mp3 结束后由 GameState 接续 StartMusic.mp3。
-		if is_instance_valid(music) and music.playing:
-			music.reparent(get_tree().root)
-			music.process_mode = Node.PROCESS_MODE_ALWAYS
-		elif is_instance_valid(music):
-			# 如果没在播放（极端情况），直接释放；StartMusic 已由 GameState 接续。
+		# 正常播完时，GameState 会在 CGv1.mp3 finished 后接续 StartMusic.mp3。
+		if is_instance_valid(music) and not music.playing:
 			music.queue_free()
 
 	# 切场景前主动解除本场景持有的 CG 大纹理引用，避免旧场景被销毁时一次性回收
 	# 剩余 CG 帧（正常播完时仅末尾几帧，跳过时可能仍有大量帧驻留）的 GPU 资源，
 	# 把这部分同步回收开销从「切换那一帧」剥离出去，消除切场景卡顿。
 	# BgLayer 仍指向 shared_start_bg_frames 中的帧（main_menu 复用），不在此解除。
-	if is_instance_valid(cg_layer):
+	if not _cg_visual_done and is_instance_valid(cg_layer):
 		cg_layer.texture = null
 	for i in range(_cg_frames.size()):
 		_cg_frames[i] = null

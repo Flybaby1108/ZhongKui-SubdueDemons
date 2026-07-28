@@ -40,6 +40,7 @@ var shared_start_bg_frames: Array = []
 # "ObjectDB instances leaked at exit" 警告（典型场景：玩家在 level_1 后台
 # 加载完成后、未进入游戏就直接关闭窗口）。因此退出前统一把它们取回释放。
 var _pending_threaded_loads: Dictionary = {}
+var _transition_resource_cache: Dictionary = {}
 
 func _notification(what: int) -> void:
 	# autoload 单例的生命周期等于整个进程。它持有的 shared_start_bg_frames
@@ -180,6 +181,7 @@ func flush_audio_thread() -> void:
 
 func _clear_shared_textures() -> void:
 	shared_start_bg_frames.clear()
+	_transition_resource_cache.clear()
 
 # 关窗兜底：遍历完整场景树，解除所有可见纹理与音频 stream 引用。
 # cg_intro 的 $BgLayer/$CgLayer、main_menu 的 $Background 等节点在退出时仍持有
@@ -235,10 +237,28 @@ func request_threaded_load(path: String) -> void:
 		ResourceLoader.load_threaded_request(path)
 		_pending_threaded_loads[path] = true
 
+func has_pending_threaded_load(path: String) -> bool:
+	return _pending_threaded_loads.has(path)
+
 # 取回一次线程加载结果，并从待取回表注销，释放其内部引用。
 func take_threaded_load(path: String) -> Resource:
+	if not _pending_threaded_loads.has(path):
+		return null
 	_pending_threaded_loads.erase(path)
 	return ResourceLoader.load_threaded_get(path)
+
+func hold_transition_resource(path: String, res: Resource) -> void:
+	if path.is_empty() or res == null:
+		return
+	_transition_resource_cache[path] = res
+
+func load_transition_or_file(path: String) -> Resource:
+	if _transition_resource_cache.has(path):
+		return _transition_resource_cache[path]
+	return load(path)
+
+func clear_transition_resource_cache() -> void:
+	_transition_resource_cache.clear()
 
 # 退出前把所有尚未取走的线程加载请求取回，避免 RefCounted 泄漏。
 func _drain_pending_threaded_loads() -> void:
@@ -246,6 +266,7 @@ func _drain_pending_threaded_loads() -> void:
 		# 取回即释放：无论加载是否完成，load_threaded_get 都会结束该请求。
 		ResourceLoader.load_threaded_get(path)
 	_pending_threaded_loads.clear()
+	_transition_resource_cache.clear()
 
 # 节点生命周期内的延迟等待，返回一次性 Timer 节点的 timeout 信号。
 #
@@ -453,6 +474,16 @@ func can_revive_from_game_over() -> bool:
 	return can_afford_coin_value(REVIVE_COST_COIN_VALUE) and has_stage(current_stage)
 
 func revive_from_game_over() -> bool:
+	# 同步切场景版本（保留作兜底）。注意：Web 导出为单线程，change_scene_to_file 会在
+	# 主线程同步解包关卡场景与上百张贴图，导致浏览器主线程阻塞、页面"卡住不动"。
+	# 线上（GitHub Pages / Web）复活请改用 begin_revive_from_game_over + 线程加载。
+	if not _consume_revive_cost():
+		return false
+	get_tree().change_scene_to_file(_get_stage_scene_path(current_stage))
+	return true
+
+# 扣费并复位复活相关状态，但不切场景。成功返回 true。
+func _consume_revive_cost() -> bool:
 	if not can_revive_from_game_over():
 		return false
 	if not spend_coin_value(REVIVE_COST_COIN_VALUE):
@@ -462,8 +493,45 @@ func revive_from_game_over() -> bool:
 	lives = MAX_LIVES
 	lives_changed.emit(lives)
 	stage_changed.emit(current_stage)
-	get_tree().change_scene_to_file(_get_stage_scene_path(current_stage))
 	return true
+
+# 异步复活：扣费 + 复位状态，并发起当前关卡场景与重资源的线程加载（非阻塞）。
+# 成功返回 true 后，调用方需轮询 revive_load_done() 并在完成时用
+# take_revive_packed_scene() 取回 PackedScene 进行 change_scene_to_packed。
+# 这样可避免 Web 单线程下同步切场景造成的卡死。
+func begin_revive_from_game_over() -> bool:
+	if not _consume_revive_cost():
+		return false
+	var scene_path := _get_stage_scene_path(current_stage)
+	request_threaded_load(scene_path)
+	for path in Level.get_stage_preload_resource_paths(current_stage):
+		request_threaded_load(path)
+	return true
+
+# 复活场景与重资源是否全部加载完成。
+func revive_load_done() -> bool:
+	if not _threaded_path_done(_get_stage_scene_path(current_stage)):
+		return false
+	for path in Level.get_stage_preload_resource_paths(current_stage):
+		if not _threaded_path_done(path):
+			return false
+	return true
+
+func _threaded_path_done(path: String) -> bool:
+	if not has_pending_threaded_load(path):
+		return true
+	var status := ResourceLoader.load_threaded_get_status(path)
+	return status != ResourceLoader.THREAD_LOAD_IN_PROGRESS
+
+# 取回复活场景的 PackedScene，并把重资源登记进过渡缓存以持有引用。
+func take_revive_packed_scene() -> PackedScene:
+	var scene_path := _get_stage_scene_path(current_stage)
+	var packed := take_threaded_load(scene_path) as PackedScene
+	for path in Level.get_stage_preload_resource_paths(current_stage):
+		var res := take_threaded_load(path)
+		if res != null:
+			hold_transition_resource(path, res)
+	return packed
 
 func lose_life() -> int:
 	lives = max(0, lives - 1)
@@ -498,7 +566,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		if current_scene_path != "res://scenes/main.tscn":
 			goto_main_menu()
 
-func goto_stage(n: int) -> void:
+func goto_stage(n: int, packed: PackedScene = null) -> void:
 	if n < 1 or not has_stage(n):
 		return
 	# 进入新关卡：复位通关守卫与 game_over 队列守卫，使下一关的 game_over 能正常触发。
@@ -518,10 +586,16 @@ func goto_stage(n: int) -> void:
 		yuanbao_changed.emit(yuanbao)
 		lives_changed.emit(lives)
 	current_stage = n
-	get_tree().change_scene_to_file(_get_stage_scene_path(n))
+	if packed != null:
+		get_tree().change_scene_to_packed(packed)
+	else:
+		get_tree().change_scene_to_file(_get_stage_scene_path(n))
+
+func get_stage_scene_path(stage: int) -> String:
+	return "res://scenes/level_%d.tscn" % stage
 
 func _get_stage_scene_path(stage: int) -> String:
-	return "res://scenes/level_%d.tscn" % stage
+	return get_stage_scene_path(stage)
 
 func goto_main_menu() -> void:
 	_level_cleared = false

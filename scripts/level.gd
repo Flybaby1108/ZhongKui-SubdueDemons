@@ -23,6 +23,14 @@ const STAGE_BGM_PATHS := {
 	3: "res://assets/audio/Chapter3_BGM.mp3",
 	4: "res://assets/audio/ChapterBoss_BGM.mp3",
 }
+const ENEMY_SCENE_PATHS := [
+	"res://scenes/enemy_meteor_hammer.tscn",
+	"res://scenes/enemy_red_ghost.tscn",
+	"res://scenes/enemy_red_devil.tscn",
+	"res://scenes/enemy_palace_zombie.tscn",
+	"res://scenes/enemy_fat_demon_king.tscn",
+	"res://scenes/enemy_boss.tscn",
+]
 const PASS_EFFECT_AUDIO_PATH := "res://assets/audio/PassEffect.mp3"
 const PASS_EFFECT_STAGE_CONFIGS := {
 	1: {
@@ -45,6 +53,7 @@ const PASS_EFFECT_STAGE_CONFIGS := {
 const PASS_EFFECT_FRAME_COUNT := 97
 const PASS_EFFECT_FALLBACK_FPS := 24.0
 const PASS_EFFECT_BLACK_SCREEN_TIME := 0.8
+const NEXT_STAGE_PRELOAD_BLACK_TIMEOUT := 3.0
 # ChapterBoss 通关后的游戏结束动画（EndEffect）
 const END_EFFECT_FRAME_DIR := "res://assets/sprites/EndEffect"
 const END_EFFECT_FRAME_PREFIX := "EndEffect_Base_"
@@ -110,12 +119,12 @@ func _ready() -> void:
 	add_to_group("level")
 	# Lazy-load enemy scenes to avoid preload()-time script compilation race
 	# (enemy.gd references CharTuning autoload; preload may run before autoloads register)
-	METEOR_HAMMER_SCENE = load("res://scenes/enemy_meteor_hammer.tscn")
-	RED_GHOST_SCENE = load("res://scenes/enemy_red_ghost.tscn")
-	RED_DEVIL_SCENE = load("res://scenes/enemy_red_devil.tscn")
-	PALACE_ZOMBIE_SCENE = load("res://scenes/enemy_palace_zombie.tscn")
-	FAT_DEMON_KING_SCENE = load("res://scenes/enemy_fat_demon_king.tscn")
-	BOSS_SCENE = load("res://scenes/enemy_boss.tscn")
+	METEOR_HAMMER_SCENE = GameState.load_transition_or_file("res://scenes/enemy_meteor_hammer.tscn") as PackedScene
+	RED_GHOST_SCENE = GameState.load_transition_or_file("res://scenes/enemy_red_ghost.tscn") as PackedScene
+	RED_DEVIL_SCENE = GameState.load_transition_or_file("res://scenes/enemy_red_devil.tscn") as PackedScene
+	PALACE_ZOMBIE_SCENE = GameState.load_transition_or_file("res://scenes/enemy_palace_zombie.tscn") as PackedScene
+	FAT_DEMON_KING_SCENE = GameState.load_transition_or_file("res://scenes/enemy_fat_demon_king.tscn") as PackedScene
+	BOSS_SCENE = GameState.load_transition_or_file("res://scenes/enemy_boss.tscn") as PackedScene
 	time_remaining = time_limit
 	GameState.current_stage = stage_number
 	GameState.stage_changed.emit(stage_number)
@@ -174,7 +183,7 @@ func _play_stage_bgm() -> void:
 	if not STAGE_BGM_PATHS.has(stage_number):
 		return
 	var bgm_path: String = STAGE_BGM_PATHS[stage_number]
-	var stream := load(bgm_path) as AudioStream
+	var stream := GameState.load_transition_or_file(bgm_path) as AudioStream
 	if stream == null:
 		push_warning("Stage %d BGM not found: %s" % [stage_number, bgm_path])
 		return
@@ -185,6 +194,7 @@ func _play_stage_bgm() -> void:
 	bgm_player.stream = stream
 	add_child(bgm_player)
 	bgm_player.play()
+	GameState.clear_transition_resource_cache()
 
 func _spawn_chapter3_mechanism_preview() -> void:
 	if stage_number != 3:
@@ -204,7 +214,7 @@ func _spawn_chapter3_mechanism_preview() -> void:
 	# 静止铁球预览：停在机关平台右侧（与运行时机关展示一致）
 	var rest_ball := Sprite2D.new()
 	rest_ball.name = "RestIronBall"
-	rest_ball.texture = load(FDK_IRON_BALL_TEXTURE) as Texture2D
+	rest_ball.texture = GameState.load_transition_or_file(FDK_IRON_BALL_TEXTURE) as Texture2D
 	rest_ball.scale = Vector2(FDK_IRON_BALL_PREVIEW_SCALE, FDK_IRON_BALL_PREVIEW_SCALE)
 	rest_ball.z_index = 102
 	pivot_node.add_child(rest_ball)
@@ -289,7 +299,7 @@ func _get_viewport_center_global() -> Vector2:
 static func _load_fdk_mechanism_texture() -> Texture2D:
 	if _fdk_mechanism_texture_cache != null:
 		return _fdk_mechanism_texture_cache
-	_fdk_mechanism_texture_cache = load(FDK_MECHANISM_TEXTURE) as Texture2D
+	_fdk_mechanism_texture_cache = GameState.load_transition_or_file(FDK_MECHANISM_TEXTURE) as Texture2D
 	if _fdk_mechanism_texture_cache == null:
 		push_warning("Failed to load Chapter3 mechanism PNG: %s" % FDK_MECHANISM_TEXTURE)
 		return null
@@ -720,45 +730,98 @@ func _on_stage_clear(skip_pass_effect: bool = false, skip_active_ball_wait: bool
 		if _has_end_effect_for_stage():
 			await _play_end_effect()
 			return
-		await _show_pass_effect_black_screen()
+		await _show_pass_effect_black_screen(stage_number + 1)
 	else:
 		await GameState.wait(self, 1.5)
 	var next_stage := stage_number + 1
 	GameState.current_stage = stage_number
 	if GameState.advance_stage() and GameState.current_stage == next_stage:
-		# 切场景是同步的——先把已预加载的下一关重资源取回（注销线程加载请求并写入
-		# ResourceLoader 缓存 + Boss 静态缓存），确保下一关 _ready 的 load() 命中缓存。
-		_collect_next_stage_assets()
-		GameState.goto_stage(next_stage)
+		# 切场景是同步的——先把已预加载的下一关场景与重资源取回（注销线程加载请求并写入
+		# 过渡缓存 / Boss 静态缓存），确保下一关 _ready 的 load() 命中缓存。
+		var packed := _collect_next_stage_assets(next_stage)
+		GameState.goto_stage(next_stage, packed)
 	else:
 		GameState.goto_victory()
 
-# 判断下一关是否包含 Boss（地图中存在 'B' 标记）。
-func _next_stage_has_boss() -> bool:
-	var grid: Array = LevelData.LEVELS.get(stage_number + 1, [])
+# 判断指定关卡是否包含 Boss（地图中存在 'B' 标记）。
+static func _stage_has_boss(stage: int) -> bool:
+	var grid: Array = LevelData.LEVELS.get(stage, [])
 	for row in grid:
 		if String(row).find("B") != -1:
 			return true
 	return false
 
-# 在切到下一关之前，提前发起下一关重资源的线程预加载（非阻塞）。
-# 通关动画/黑场期间后台线程完成加载，避免切场景那一帧同步吞下 150+ 张贴图造成卡顿。
+# 返回下一关 _ready() 会立刻同步 load 的资源路径。通关动画期间先请求这些资源，
+# 到新关 _ready() 时通过 GameState 的过渡缓存或 ResourceLoader 缓存直接命中。
+static func get_stage_preload_resource_paths(stage: int) -> Array[String]:
+	var paths: Array[String] = []
+	for path in ENEMY_SCENE_PATHS:
+		paths.append(str(path))
+	if STAGE_BGM_PATHS.has(stage):
+		paths.append(str(STAGE_BGM_PATHS[stage]))
+	if stage == 3:
+		paths.append(FDK_MECHANISM_TEXTURE)
+		paths.append(FDK_IRON_BALL_TEXTURE)
+	if _stage_has_boss(stage):
+		for path in Boss.get_preload_resource_paths():
+			paths.append(str(path))
+	return _dedupe_paths(paths)
+
+static func _dedupe_paths(paths: Array[String]) -> Array[String]:
+	var seen := {}
+	var deduped: Array[String] = []
+	for path in paths:
+		if seen.has(path):
+			continue
+		seen[path] = true
+		deduped.append(path)
+	return deduped
+
+# 在切到下一关之前，提前发起下一关场景与重资源的线程预加载（非阻塞）。
+# 通关动画/黑场期间后台线程完成加载，避免切场景那一帧同步解包关卡背景与 150+ 张贴图。
 func _preload_next_stage_assets() -> void:
-	if not _next_stage_has_boss():
+	var next_stage := stage_number + 1
+	if not GameState.has_stage(next_stage):
 		return
-	for path in Boss.get_preload_resource_paths():
+	GameState.request_threaded_load(GameState.get_stage_scene_path(next_stage))
+	for path in get_stage_preload_resource_paths(next_stage):
 		GameState.request_threaded_load(path)
 
 # 切场景前把预加载结果取回：注销 GameState 的待取回登记（避免 RefCounted 残留），
 # 并将资源登记到 Boss 静态缓存以持有引用。资源随之进入 ResourceLoader 缓存，
 # 下一关 Boss._ready() 里的 load() 即可即时命中而不再读盘解码。
-func _collect_next_stage_assets() -> void:
-	if not _next_stage_has_boss():
-		return
-	for path in Boss.get_preload_resource_paths():
+func _collect_next_stage_assets(next_stage: int) -> PackedScene:
+	var scene_path := GameState.get_stage_scene_path(next_stage)
+	var packed := GameState.take_threaded_load(scene_path) as PackedScene
+
+	var boss_paths := {}
+	if _stage_has_boss(next_stage):
+		for path in Boss.get_preload_resource_paths():
+			boss_paths[path] = true
+
+	for path in get_stage_preload_resource_paths(next_stage):
 		var res := GameState.take_threaded_load(path)
 		if res != null:
-			Boss.register_preloaded(path, res)
+			GameState.hold_transition_resource(path, res)
+			if boss_paths.has(path):
+				Boss.register_preloaded(path, res)
+	return packed
+
+func _next_stage_assets_done(next_stage: int) -> bool:
+	if not GameState.has_stage(next_stage):
+		return true
+	if not _threaded_path_done(GameState.get_stage_scene_path(next_stage)):
+		return false
+	for path in get_stage_preload_resource_paths(next_stage):
+		if not _threaded_path_done(path):
+			return false
+	return true
+
+func _threaded_path_done(path: String) -> bool:
+	if not GameState.has_pending_threaded_load(path):
+		return true
+	var status := ResourceLoader.load_threaded_get_status(path)
+	return status != ResourceLoader.THREAD_LOAD_IN_PROGRESS
 
 func _play_pass_effect() -> void:
 	if is_instance_valid(bgm_player) and bgm_player.playing:
@@ -824,7 +887,7 @@ func play_pass_effect_for_game_over() -> void:
 func lock_for_game_over() -> void:
 	level_complete = true
 
-func _show_pass_effect_black_screen() -> void:
+func _show_pass_effect_black_screen(next_stage: int = -1) -> void:
 	if not is_inside_tree():
 		return
 
@@ -840,7 +903,15 @@ func _show_pass_effect_black_screen() -> void:
 	black_screen.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	layer.add_child(black_screen)
 
-	await GameState.wait(self, PASS_EFFECT_BLACK_SCREEN_TIME)
+	var elapsed := 0.0
+	while is_inside_tree():
+		var min_time_done := elapsed >= PASS_EFFECT_BLACK_SCREEN_TIME
+		var next_stage_done := next_stage < 1 or _next_stage_assets_done(next_stage)
+		var preload_wait_expired := elapsed >= PASS_EFFECT_BLACK_SCREEN_TIME + NEXT_STAGE_PRELOAD_BLACK_TIMEOUT
+		if min_time_done and (next_stage_done or preload_wait_expired):
+			return
+		await GameState.wait(self, 0.05)
+		elapsed += 0.05
 
 func _play_end_effect() -> void:
 	if is_instance_valid(bgm_player) and bgm_player.playing:

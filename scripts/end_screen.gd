@@ -39,8 +39,13 @@ var _showing_fail_screen: bool = false
 var _showing_bribery_offer: bool = false
 var _bribery_accepting: bool = false
 var _returning_to_menu: bool = false
+# 复活中：已扣费并发起线程加载关卡场景，正在 _process 里轮询加载完成后再切场景。
+# Web 单线程下若同步 change_scene_to_file 会阻塞主线程导致页面卡死，故改为异步。
+var _reviving: bool = false
 
 func _ready() -> void:
+	# 默认关闭 _process，仅在发起异步复活后开启轮询，避免无谓的每帧调用。
+	set_process(false)
 	if not is_victory and GameState.can_revive_from_game_over():
 		_showing_bribery_offer = true
 		_setup_bribery_offer()
@@ -100,11 +105,15 @@ func _input(event: InputEvent) -> void:
 			_return_to_main_menu_from_fail()
 		return
 
+	if _reviving:
+		get_viewport().set_input_as_handled()
+		return
+
 	if event.is_action_pressed("vacuum") or event.is_action_pressed("ui_accept"):
 		get_viewport().set_input_as_handled()
 		Input.action_release("vacuum")
 		Input.action_release("ui_accept")
-		if not is_victory and GameState.revive_from_game_over():
+		if not is_victory and _begin_revive():
 			return
 		GameState.goto_main_menu()
 
@@ -307,10 +316,40 @@ func _accept_bribery_offer() -> void:
 	_bribery_accepting = true
 	if _bribery_coin_player != null and _bribery_coin_player.stream != null:
 		_bribery_coin_player.play()
-		await _bribery_coin_player.finished
+	call_deferred("_finish_bribery_acceptance")
+
+func _finish_bribery_acceptance() -> void:
 	if not is_inside_tree():
 		return
-	GameState.revive_from_game_over()
+	if _begin_revive():
+		return
+	_bribery_accepting = false
+	_update_hint_text()
+
+# 发起异步复活：扣费 + 线程加载关卡场景。成功后进入 _reviving 轮询态，
+# 由 _process 在加载完成时用 change_scene_to_packed 切场景。避免 Web 单线程卡死。
+func _begin_revive() -> bool:
+	if _reviving:
+		return true
+	if not GameState.begin_revive_from_game_over():
+		return false
+	_reviving = true
+	set_process(true)
+	return true
+
+func _process(_delta: float) -> void:
+	if not _reviving:
+		return
+	if not GameState.revive_load_done():
+		return
+	_reviving = false
+	set_process(false)
+	var packed := GameState.take_revive_packed_scene()
+	if packed != null:
+		get_tree().change_scene_to_packed(packed)
+	else:
+		# 线程加载结果异常丢失：兜底同步切场景（极少发生）。
+		get_tree().change_scene_to_file(GameState.get_stage_scene_path(GameState.current_stage))
 
 func _apply_fail_word_tuning() -> void:
 	if not is_instance_valid(_fail_word_image):
