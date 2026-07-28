@@ -42,6 +42,9 @@ var _returning_to_menu: bool = false
 # 复活中：已扣费并发起线程加载关卡场景，正在 _process 里轮询加载完成后再切场景。
 # Web 单线程下若同步 change_scene_to_file 会阻塞主线程导致页面卡死，故改为异步。
 var _reviving: bool = false
+# 复活等待的累计时长（秒）：达到上限即使音效/加载未完成也强制切场景，防止卡在复活界面。
+var _revive_wait_t: float = 0.0
+const REVIVE_MAX_WAIT_TIME := 6.0
 
 func _ready() -> void:
 	# 默认关闭 _process，仅在发起异步复活后开启轮询，避免无谓的每帧调用。
@@ -334,14 +337,21 @@ func _begin_revive() -> bool:
 	if not GameState.begin_revive_from_game_over():
 		return false
 	_reviving = true
+	_revive_wait_t = 0.0
 	set_process(true)
 	return true
 
-func _process(_delta: float) -> void:
+func _process(delta: float) -> void:
 	if not _reviving:
 		return
-	if not GameState.revive_load_done():
-		return
+	_revive_wait_t += delta
+	# 关卡后台加载完成后，还需等 Bribery_Coin.mp3 播完再切场景，否则 end_screen 被
+	# 销毁会打断音效（异步加载太快导致音效几乎没出声）。到达等待上限则强制切场景兜底。
+	if _revive_wait_t < REVIVE_MAX_WAIT_TIME:
+		if not GameState.revive_load_done():
+			return
+		if not _bribery_coin_sfx_done():
+			return
 	_reviving = false
 	set_process(false)
 	var packed := GameState.take_revive_packed_scene()
@@ -350,6 +360,12 @@ func _process(_delta: float) -> void:
 	else:
 		# 线程加载结果异常丢失：兜底同步切场景（极少发生）。
 		get_tree().change_scene_to_file(GameState.get_stage_scene_path(GameState.current_stage))
+
+# Bribery_Coin.mp3 是否已播放结束（或本就没有播放器 / 没在播放）。
+func _bribery_coin_sfx_done() -> bool:
+	if _bribery_coin_player == null or not is_instance_valid(_bribery_coin_player):
+		return true
+	return not _bribery_coin_player.playing
 
 func _apply_fail_word_tuning() -> void:
 	if not is_instance_valid(_fail_word_image):
