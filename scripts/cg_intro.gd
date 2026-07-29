@@ -164,6 +164,9 @@ func _begin_play() -> void:
 
 	# 播放配乐
 	if music.stream != null:
+		if music.get_parent() != GameState:
+			music.reparent(GameState)
+		music.process_mode = Node.PROCESS_MODE_ALWAYS
 		music.play()
 		GameState.register_intro_music_player(music)
 
@@ -302,14 +305,10 @@ func _finish(skipped: bool = false) -> void:
 		if is_instance_valid(music) and music.playing:
 			music.stop()
 	else:
-		# 正常播完：画面先切到 main_menu，CGv1.mp3 继续挂在 root 下播完。
+		# 正常播完：画面先切到 main_menu，CGv1.mp3 继续挂在 GameState 下播完。
 		# GameState 用 _intro_music_active 兜住 Web 上 playing 状态短暂不可靠的情况，
 		# 避免 main_menu 提前启动 StartMusic.mp3；finished 后再自动接续。
-		if is_instance_valid(music) and music.stream != null:
-			if music.get_parent() != get_tree().root:
-				music.reparent(get_tree().root)
-			music.process_mode = Node.PROCESS_MODE_ALWAYS
-		elif is_instance_valid(music):
+		if is_instance_valid(music) and music.stream == null:
 			music.queue_free()
 
 	# 切场景前主动解除本场景持有的 CG 大纹理引用，避免旧场景被销毁时一次性回收

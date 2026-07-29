@@ -11,8 +11,6 @@ signal yuanbao_changed(new_yuanbao: int)
 const MAX_LIVES := 5
 const MAX_STAGE := 4
 const START_MUSIC_PATH := "res://assets/audio/StartMusic.mp3"
-const INTRO_MUSIC_END_PADDING := 0.6
-const INTRO_MUSIC_FORCE_END_PADDING := 2.0
 const INCREMENTAL_LOADS_PER_FRAME := 1
 const COPPER_COINS_PER_YUANBAO := 5
 const REVIVE_COST_COIN_VALUE := 15
@@ -32,7 +30,6 @@ var _start_music_player: AudioStreamPlayer = null
 # 是否真正播完用。Web 导出里 AudioStreamPlayer.finished 信号会提前 / 抖动触发，
 # 单靠信号会让 StartMusic 在 CG 尾声还没播完时就抢跑，造成两段 BGM 重叠。
 var _intro_music_length: float = 0.0
-var _intro_music_started_msec: int = 0
 # 轮询到的 CG 播放进度出现回退 / playback 结束的连续帧数。Web 上 get_playback_position()
 # 偶发抖动，用连续判定去抖，避免误判提前接续 StartMusic。
 var _intro_music_end_grace: int = 0
@@ -125,8 +122,6 @@ func _process(_delta: float) -> void:
 func _poll_intro_music() -> void:
 	if not _intro_music_active:
 		return
-	if _intro_music_length > 0.0 and not _has_intro_music_elapsed(INTRO_MUSIC_END_PADDING):
-		return
 	if not is_instance_valid(_intro_music_player):
 		# 播放器已被释放（异常路径），直接接续，避免卡在 _intro_music_active。
 		_finish_intro_music()
@@ -138,23 +133,14 @@ func _poll_intro_music() -> void:
 		return
 
 	var pos := player.get_playback_position()
-	var reached_stream_end := pos >= _intro_music_length - 0.05
-	var playback_stopped := not player.playing
-	var exceeded_failsafe := _has_intro_music_elapsed(INTRO_MUSIC_FORCE_END_PADDING)
-	# 只有墙钟时间已经跨过完整曲长后，才接受播放位置 / playing 状态的结束判定。
-	# Web 导出里这两个状态都可能提前抖动；墙钟下限可以挡住片尾仍可听见时的抢跑。
-	if reached_stream_end or playback_stopped or exceeded_failsafe:
+	# 播放位置走到流末尾附近（留 0.05s 余量）即视为播完。用连续 2 帧确认去抖，
+	# 避免 Web 上单帧位置抖动误判。
+	if pos >= _intro_music_length - 0.05 or not player.playing:
 		_intro_music_end_grace += 1
 		if _intro_music_end_grace >= 2:
 			_finish_intro_music()
 	else:
 		_intro_music_end_grace = 0
-
-func _has_intro_music_elapsed(extra_seconds: float) -> bool:
-	if _intro_music_started_msec <= 0 or _intro_music_length <= 0.0:
-		return false
-	var elapsed := float(Time.get_ticks_msec() - _intro_music_started_msec) / 1000.0
-	return elapsed >= _intro_music_length + extra_seconds
 
 func _handle_close_request() -> void:
 	if _quitting:
@@ -475,7 +461,6 @@ func prepare_start_sequence_music() -> void:
 	stop_start_sequence_music()
 	_allow_start_sequence_music = true
 	_intro_music_active = false
-	_intro_music_started_msec = 0
 
 func enable_start_sequence_music() -> void:
 	_allow_start_sequence_music = true
@@ -487,7 +472,6 @@ func register_intro_music_player(player: AudioStreamPlayer) -> void:
 	_intro_music_active = true
 	_allow_start_sequence_music = true
 	_intro_music_end_grace = 0
-	_intro_music_started_msec = Time.get_ticks_msec()
 	# 缓存流总时长，供 _poll_intro_music 判定是否真正播完。
 	_intro_music_length = 0.0
 	if player.stream != null:
@@ -529,7 +513,6 @@ func stop_start_sequence_music() -> void:
 	_allow_start_sequence_music = false
 	_intro_music_active = false
 	_intro_music_length = 0.0
-	_intro_music_started_msec = 0
 	_intro_music_end_grace = 0
 	if is_instance_valid(_intro_music_player):
 		if _intro_music_player.playing:
@@ -549,11 +532,9 @@ func _on_intro_music_finished() -> void:
 	# 在音频真正播完时接续。
 	if not _intro_music_active:
 		return
-	if _intro_music_length > 0.0 and not _has_intro_music_elapsed(INTRO_MUSIC_END_PADDING):
-		return
 	if is_instance_valid(_intro_music_player) and _intro_music_length > 0.0:
 		var pos := _intro_music_player.get_playback_position()
-		if pos < _intro_music_length - 0.15 and _intro_music_player.playing and not _has_intro_music_elapsed(INTRO_MUSIC_FORCE_END_PADDING):
+		if pos < _intro_music_length - 0.15 and _intro_music_player.playing:
 			# 明显早于结尾且仍在播放：判定为 Web 抖动误触发，忽略。
 			return
 	_finish_intro_music()
@@ -566,7 +547,6 @@ func _finish_intro_music() -> void:
 		return
 	_intro_music_active = false
 	_intro_music_length = 0.0
-	_intro_music_started_msec = 0
 	_intro_music_end_grace = 0
 	if is_instance_valid(_intro_music_player):
 		if _intro_music_player.playing:
